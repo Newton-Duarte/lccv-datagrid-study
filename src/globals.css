@@ -1,0 +1,23 @@
+@import '@sbwb-design-system/themes/tailwind.css';
+@import '@sbwb-design-system/ui-core/tailwind.css';
+
+@source '../src/**/*.{ts,tsx}';
+
+@layer base {
+  :root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply sw:font-family-primary sw:bg-background-default sw:min-h-screen;
+  }
+}
+
+@utility container {
+  padding: 2rem;
+  margin-inline: auto;
+
+  @variant 2xl {
+    width: 90rem;
+  }
+}
