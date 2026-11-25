@@ -60,3 +60,28 @@ Both screenshots were inspected after the passing run in clean seed state. The n
 ## Concerns
 
 Only the informational Vite bundle-size warning remains. No functional or verification concern was found.
+
+## Review correction round
+
+Addressed every Important review finding and the noted narrow-button issue:
+
+- Removed the grid host's inline `width: 100%`; the bordered host now sizes to the card's available content width while AG Grid retains its own horizontal scroll. The browser callback measures host/card bounds at 1440×1000 and 390×844 and fails if the host exceeds the card.
+- Added true active-editor Save coverage for name, salary, and date: each helper fills the still-visible editor and clicks Save without pressing Enter first, then asserts the saved value and clean state.
+- The invalid new-row Save now captures existing saved Name and salary values and compares them before/after failed Save and after Discard. The successful name Save scenario focuses a grid cell before Ctrl+Z, asserts dirty relative to the new baseline, then verifies Discard restores that saved value.
+- Added real range Ctrl+C coverage with clipboard-content assertions, destination range paste assertions, and unchanged `18 registros`; mixed-validity salary paste remains covered separately.
+- Added `console` error and `pageerror` listeners; the callback fails on any browser error instead of only reporting request checks.
+- Narrow actions stack with `white-space: nowrap`, so `Salvar alterações` no longer wraps at 390px.
+- Updated all Ctrl+Z checks to focus a grid cell before invoking the shortcut, ensuring Spreadsheet history—not the external toolbar—handles the command.
+
+Correction-round commands and results:
+
+```bash
+npm test
+npm run lint
+npm run build
+git diff --check
+playwright-cli -s=spreadsheet-final open http://127.0.0.1:5187/
+playwright-cli -s=spreadsheet-final run-code --filename=scripts/verify-users-browser.js
+```
+
+All exited 0. The corrected callback returned `{ ok: true }`, reported no console/page errors, and rewrote the inspected screenshots at `/tmp/cadastro-usuarios-desktop.png` and `/tmp/cadastro-usuarios-narrow.png`. The only remaining build output is the existing informational Vite bundle-size warning.

@@ -408,7 +408,7 @@ export function UserGrid({
     <div
       ref={attachSpreadsheetHost}
       className="user-grid-host"
-      style={{ height: '30rem', minHeight: '20rem', width: '100%' }}
+      style={{ height: '30rem', minHeight: '20rem' }}
       aria-label="Tabela de usuários"
     >
       {/* The Spreadsheet hook intentionally supplies these composed public props. */}

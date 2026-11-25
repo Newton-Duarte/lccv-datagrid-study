@@ -2,6 +2,7 @@ async (page) => {
   const failures = []
   const seedIds = new Set(Array.from({ length: 18 }, (_, index) => `user-${String(index + 1).padStart(3, '0')}`))
   const externalRequests = []
+  const consoleErrors = []
 
   page.on('request', (request) => {
     const url = request.url()
@@ -9,6 +10,10 @@ async (page) => {
       externalRequests.push(`${request.method()} ${url}`)
     }
   })
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => consoleErrors.push(error.message))
 
   const assert = (condition, message) => {
     if (!condition) throw new Error(message)
@@ -24,7 +29,7 @@ async (page) => {
   }
 
   const button = (name) => page.getByRole('button', { name, exact: true })
-  const row = (id) => page.locator(`.ag-row[row-id="${id}"]`)
+  const row = (id) => page.locator(`.ag-row[row-id="${id}"]:visible`).first()
   const cell = (id, column) => row(id).locator(`[col-id="${column}"]`)
   const normalized = (value) => value.replace(/\s+/g, ' ').trim()
   const cellText = async (id, column) => normalized((await cell(id, column).textContent()) ?? '')
@@ -44,6 +49,29 @@ async (page) => {
     await waitFor(async () => !(await editor.isVisible()), `O editor ${label} não foi finalizado`)
     const expected = column === 'numericValue' && !value.includes(',') ? `${value},00` : value
     await waitFor(async () => (await cellText(id, column)).includes(expected), `A edição de ${label} não foi publicada`)
+  }
+
+  const editTextAndSave = async (id, column, label, value) => {
+    await cell(id, column).dblclick()
+    const editor = page.locator(`input[aria-label="${label}"]`)
+    await editor.fill(value)
+    assert(await editor.isVisible(), `O editor ${label} deveria permanecer ativo antes de Save`)
+    await save().click()
+    await waitFor(() => page.getByText('Alterações salvas nesta sessão', { exact: true }).isVisible(), `Save ativo não anunciou sucesso para ${label}`)
+    const expected = column === 'numericValue' && !value.includes(',') ? `${value},00` : value
+    await waitFor(async () => (await cellText(id, column)).includes(expected), `Save ativo não publicou ${label}`)
+    assert(await save().isDisabled(), `Save deveria ficar limpo após ${label}`)
+  }
+
+  const assertGridFitsCard = async (label) => {
+    const geometry = await page.evaluate(() => {
+      const card = document.querySelector('.user-card')?.getBoundingClientRect()
+      const host = document.querySelector('.user-grid-host')?.getBoundingClientRect()
+      if (!card || !host) return null
+      return { cardLeft: card.left, cardRight: card.right, hostLeft: host.left, hostRight: host.right }
+    })
+    assert(geometry !== null, `${label}: não foi possível medir card e grid`)
+    assert(geometry.hostLeft >= geometry.cardLeft - 1 && geometry.hostRight <= geometry.cardRight + 1, `${label}: host da grade excede o card`)
   }
 
   const editRoleWithKeyboard = async (id) => {
@@ -68,7 +96,10 @@ async (page) => {
   }
 
   try {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:5187' })
+    await page.setViewportSize({ width: 1440, height: 1000 })
     await fresh()
+    await assertGridFitsCard('desktop inicial')
     const initialStorage = await page.evaluate(() => JSON.stringify({
       local: Object.fromEntries(Object.entries(localStorage)),
       session: Object.fromEntries(Object.entries(sessionStorage)),
@@ -82,11 +113,14 @@ async (page) => {
     }
     assert((await page.getByRole('columnheader', { name: 'Ações' }).count()) === 0, 'A grade não pode ter coluna Ações')
 
-    await editText('user-001', 'name', 'Nome do usuário', 'Ana Luísa Ferreira Revisada')
-    await save().click()
-    await waitFor(() => page.getByText('Alterações salvas nesta sessão', { exact: true }).isVisible(), 'Save não anunciou sucesso')
+    await editTextAndSave('user-001', 'name', 'Nome do usuário', 'Ana Luísa Ferreira Revisada')
     assert((await cellText('user-001', 'name')).includes('Ana Luísa Ferreira Revisada'), 'Save perdeu a edição final do nome')
-    assert(await save().isDisabled(), 'Save deveria ficar limpo após confirmar')
+    await cell('user-001', 'name').click()
+    await page.keyboard.press('Control+Z')
+    await waitFor(async () => !(await save().isDisabled()), 'Undo após Save não marcou a planilha como pendente')
+    await discard().click()
+    await waitFor(() => page.getByText('Alterações descartadas', { exact: true }).isVisible(), 'Discard após Undo não anunciou restauração')
+    assert((await cellText('user-001', 'name')).includes('Ana Luísa Ferreira Revisada'), 'Discard não restaurou o baseline criado por Save')
     await editText('user-001', 'name', 'Nome do usuário', 'Nome temporário')
     await discard().click()
     await waitFor(() => page.getByText('Alterações descartadas', { exact: true }).isVisible(), 'Discard não anunciou restauração')
@@ -98,10 +132,9 @@ async (page) => {
     await page.keyboard.press('Enter')
     await waitFor(async () => (await nameHeader.getAttribute('aria-sort')) === 'descending', 'A ordenação reversa não foi aplicada')
     assert(await row('user-002').isVisible(), 'user-002 deveria permanecer visível após ordenar')
-    await editText('user-002', 'numericValue', 'Salário mensal em reais', '6.321,75')
+    await editTextAndSave('user-002', 'numericValue', 'Salário mensal em reais', '6.321,75')
     assert((await cellText('user-002', 'numericValue')).includes('6.321,75'), 'Salário de user-002 não foi atualizado')
     assert(!(await cellText('user-001', 'numericValue')).includes('6.321,75'), 'A ordenação roteou a edição para outro usuário')
-    await discard().click()
 
     await fresh()
     await nameHeader.click()
@@ -110,6 +143,8 @@ async (page) => {
     await filterInput.fill('zzzz')
     await page.keyboard.press('Enter')
     await page.waitForTimeout(200)
+    const savedNameBeforeInvalid = await cellText('user-001', 'name')
+    const savedSalaryBeforeInvalid = await cellText('user-002', 'numericValue')
     const draftId = await addDraft()
     assert((await page.getByRole('columnheader', { name: 'Nome' }).getAttribute('aria-sort')) === 'none', 'Adicionar deveria limpar a ordenação')
     assert((await page.getByRole('textbox', { name: 'Valor do Filtro' }).count()) === 0, 'Adicionar deveria limpar o filtro')
@@ -123,11 +158,37 @@ async (page) => {
     }))
     assert(focused.rowId === draftId && focused.columnId === 'name', 'Save inválido não focou a primeira célula inválida')
     assert((await errorSummary.textContent()).includes('Salário mensal'), 'Resumo acessível não identificou o campo inválido')
+    assert((await cellText('user-001', 'name')).startsWith(savedNameBeforeInvalid), 'Save inválido alterou o baseline de Nome existente')
+    assert((await cellText('user-002', 'numericValue')).startsWith(savedSalaryBeforeInvalid), 'Save inválido alterou o baseline de Salário existente')
     await discard().click()
     await waitFor(() => page.getByText('18 registros', { exact: true }).isVisible(), 'Discard não removeu a linha inválida')
+    assert((await cellText('user-001', 'name')).startsWith(savedNameBeforeInvalid), 'Discard perdeu o Nome salvo antes do erro')
+    assert((await cellText('user-002', 'numericValue')).startsWith(savedSalaryBeforeInvalid), 'Discard perdeu o Salário salvo antes do erro')
+    await cell('user-001', 'name').click()
     await page.keyboard.press('Control+Z')
     await page.waitForTimeout(150)
     assert(await page.getByText('18 registros', { exact: true }).isVisible(), 'Ctrl+Z reintroduziu uma linha descartada')
+
+    await fresh()
+    const copySourceA = cell('user-003', 'name')
+    const copySourceB = cell('user-004', 'name')
+    await copySourceA.click()
+    await page.keyboard.down('Shift')
+    await copySourceB.click()
+    await page.keyboard.up('Shift')
+    await page.keyboard.press('Control+C')
+    const copiedRange = await page.evaluate(() => navigator.clipboard.readText())
+    assert(copiedRange.includes('Conceição Nascimento') && copiedRange.includes('Vinícius Araújo'), 'Ctrl+C não copiou o intervalo selecionado')
+    const copyDestinationA = cell('user-005', 'name')
+    const copyDestinationB = cell('user-006', 'name')
+    await copyDestinationA.click()
+    await page.keyboard.down('Shift')
+    await copyDestinationB.click()
+    await page.keyboard.up('Shift')
+    await page.keyboard.press('Control+V')
+    await waitFor(async () => (await cellText('user-005', 'name')).includes('Conceição Nascimento'), 'Paste não publicou o primeiro intervalo copiado')
+    assert((await cellText('user-006', 'name')).includes('Vinícius Araújo'), 'Paste não publicou o segundo intervalo copiado')
+    assert(await page.getByText('18 registros', { exact: true }).isVisible(), 'Copy/paste alterou a quantidade de linhas')
 
     await fresh()
     const salaryA = cell('user-003', 'numericValue')
@@ -171,8 +232,9 @@ async (page) => {
     await fresh()
     await editRoleWithKeyboard('user-003')
     assert((await cellText('user-003', 'role')).includes('Editor'), 'Perfil não respondeu ao teclado')
-    await editText('user-003', 'birthDate', 'Data de nascimento', '29/02/2000')
+    await editTextAndSave('user-003', 'birthDate', 'Data de nascimento', '29/02/2000')
     assert((await cellText('user-003', 'birthDate')).includes('29/02/2000'), 'Data não respondeu ao teclado')
+    await fresh()
     await cell('user-003', 'birthDate').dblclick()
     const dateEditor = page.locator('input[aria-label="Data de nascimento"]')
     await dateEditor.fill('31/02/2000')
@@ -182,6 +244,7 @@ async (page) => {
     await fresh()
     await page.setViewportSize({ width: 390, height: 844 })
     await page.waitForTimeout(200)
+    await assertGridFitsCard('narrow')
     const narrow = await page.evaluate(() => ({
       documentOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       gridOverflow: [...document.querySelectorAll('.ag-body-horizontal-scroll-viewport')].some((node) => node.scrollWidth > node.clientWidth),
@@ -200,6 +263,7 @@ async (page) => {
     }))
     assert(finalStorage === initialStorage, 'A aplicação escreveu em browser storage')
     assert(externalRequests.length === 0, `A aplicação realizou requests externos: ${externalRequests.join(', ')}`)
+    assert(consoleErrors.length === 0, `O navegador registrou erros: ${consoleErrors.join(' | ')}`)
     await page.screenshot({ path: '/tmp/cadastro-usuarios-desktop.png', fullPage: true })
     console.log('Cadastro de Usuários browser regression: PASS')
   } catch (error) {
