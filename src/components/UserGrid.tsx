@@ -166,11 +166,19 @@ export function UserGrid({
     api.ensureNodeVisible(rowNode, 'middle')
     api.ensureColumnVisible('name')
     api.setFocusedCell(rowNode.rowIndex, 'name')
-    window.requestAnimationFrame(() => {
+    const startEditing = (attempt: number) => {
       const currentNode = api.getRowNode(rowId)
-      if (currentNode?.rowIndex == null) return
+      if (currentNode?.rowIndex == null) {
+        if (attempt < 8) window.setTimeout(() => startEditing(attempt + 1), 30)
+        return
+      }
+      api.setFocusedCell(currentNode.rowIndex, 'name')
       api.startEditingCell({ rowIndex: currentNode.rowIndex, colKey: 'name' })
-    })
+      if (api.getEditingCells().length === 0 && attempt < 8) {
+        window.setTimeout(() => startEditing(attempt + 1), 30)
+      }
+    }
+    window.setTimeout(() => startEditing(0), 0)
   }, [])
 
   useEffect(() => {
