@@ -89,6 +89,15 @@ export function UserGrid({
     [form],
   )
 
+  const hasFieldError = useCallback(
+    (rowId: string | undefined, field: EditableColumn): boolean => {
+      if (rowId === undefined) return false
+      const index = form.getValues('users').findIndex((row) => row.id === rowId)
+      return index >= 0 && Boolean(form.getFieldState(`users.${index}.${field}`).error)
+    },
+    [form],
+  )
+
   const [dataState] = useState(() => {
     let version = 0
     const data = createImmutableDataAdapter<UserRecord>({
@@ -219,7 +228,7 @@ export function UserGrid({
     const current = form.getValues('users')
     for (const row of current) {
       for (const field of EDITABLE_COLUMNS) {
-        if (getFieldError(row.id, field) === undefined) continue
+        if (!hasFieldError(row.id, field)) continue
         pendingFocusRef.current = { rowId: row.id, columnId: field }
         const api = apiRef.current
         const node = api?.getRowNode(row.id)
@@ -232,7 +241,7 @@ export function UserGrid({
         return
       }
     }
-  }, [form, getFieldError, tryRevealOrFocus])
+  }, [form, hasFieldError, tryRevealOrFocus])
 
   const columns = useMemo<ColDef<UserRecord>[]>(
     () =>

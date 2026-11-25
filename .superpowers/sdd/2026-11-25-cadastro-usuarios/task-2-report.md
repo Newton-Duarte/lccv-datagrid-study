@@ -33,3 +33,17 @@ Task 3 owns the real screen and integrated browser checks, so no browser regress
 - Browser interaction coverage is intentionally deferred to Task 3, where the real form owner, controls, and layout are mounted.
 - Vite retains the pre-existing large-chunk warning; no code-splitting change was made because it is outside this integration task.
 - Context7 was attempted as required, but the local package was not indexed (the lookup returned unrelated Streamlit AgGrid results); bundled `sbwb-ds-v2-aggrid` docs and installed public type/runtime signatures were used as the authority.
+
+## Round 1 review correction
+
+The imperative `focusFirstError()` path no longer depends on the passive-effect timing of `showAllErrorsRef`. It now uses `hasFieldError()` to inspect raw RHF field errors by domain ID, while `getFieldError()` retains the touched/all-errors gate for visual cell decoration. This means an untouched invalid new row can be located immediately after the screen requests all-error visibility, even before React flushes that visibility effect.
+
+Verification after the correction:
+
+- `npm run build` — passed; the existing Vite large-chunk warning remains non-fatal.
+- `npm run lint` — passed with no issues.
+- `npm test` — passed: 1 test file, 1 test, 0 failures.
+- `git diff --check` — passed.
+- Source-path self-review (`rg` over `hasFieldError`, `focusFirstError`, and `showAllErrorsRef`) confirmed the imperative path uses raw errors and the presentation path retains visibility filtering.
+
+The integrated browser regression for an untouched invalid new row remains deferred to Task 3, where the real Save flow mounts the form, toggles all-error visibility, and invokes `focusFirstError()`.
