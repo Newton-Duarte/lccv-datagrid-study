@@ -133,3 +133,11 @@ Execution selected by the user: subagent-driven orchestration, with implementati
 - Installed bundled Spreadsheet/RHF consumer docs and `react-hook-form/dist/types/form.d.ts` confirm the baseline API and synchronous ownership requirements.
 - [React Hook Form: resetDefaultValues](https://react-hook-form.com/docs/useform/resetdefaultvalues): baseline changes preserve current values and recompute dirty state.
 - [React Hook Form Resolvers: Zod integration](https://github.com/react-hook-form/resolvers#zod): use `zodResolver` with aligned schema input/output types.
+
+## Final verification outcome
+
+Implementation and correction agents used GPT-5.6 Luna at xhigh. Task reviews and the final whole-change review resolved all Critical/Important findings; final code commit: `07970d7`.
+
+Node checks, strict TypeScript/Vite build, lint, browser regression, and `git diff --check 17ba36a..HEAD` passed. The final reviewer also separately verified that Discard after canceling an active edit clears populated undo/redo history while preserving the saved value and clean state. The automated callback covers the empty-history variant; adding the populated-history variant remains a Minor coverage improvement.
+
+Discard remounts the Spreadsheet integration to guarantee a fresh history even for equal-valued resets; the form and saved baseline remain outside that lifecycle. Selection and grid view state may reset as a result. Save remains session-only. Vite's bundle-size advisory remains non-blocking; no bundle-splitting work was added.
