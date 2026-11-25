@@ -1,6 +1,6 @@
 # Cadastro de Usuários — design
 
-Status: proposed for user approval. Layout A and the form stack were selected in conversation; this document still needs approval before product implementation.
+Status: approved by the user on 2026-11-25. Layout A and the form stack were selected in conversation.
 
 ## Intent
 
@@ -18,6 +18,7 @@ The current app is a Vite starter screen. The browser mockup is a disposable vis
 
 ## Goals, non-goals, and constraints
 
+- Execution constraint added by the user: work in the current checkout, without worktrees or TDD. Write implementation before regression checks; retain build, lint, and browser verification.
 - All labels, statuses, validation, accessibility text, dates, and numeric display use `pt-BR`.
 - Edit inline; provide range selection, keyboard navigation, clipboard operations, fill, and local cell undo/redo through `useSpreadsheet`.
 - Use only Community features. There is no per-row Actions column, modal editing flow, backend, network persistence, browser storage, payroll calculation, or Excel export.
@@ -42,7 +43,7 @@ The current app is a Vite starter screen. The browser mockup is a disposable vis
 
 The page header shows a section icon, `Usuários`, a live `X registros` counter, and `Novo usuário`. Use the existing Design System rather than reproducing the mockup's CSS. The counter represents all current draft rows, including unsaved additions; filtering does not redefine the total.
 
-Immediately below the header, a compact status area shows pending changes or validation feedback, with `Descartar` and `Salvar alterações` on the right. Keep both actions visible and disabled when the form is clean. Editing is available immediately, without a separate Edit mode. Save validates and stays on this screen; no artificial loading delay or network-success state.
+Immediately below the header, a compact status area shows pending changes or validation feedback, with `Descartar` and `Salvar alterações` on the right. Keep both actions visible and disabled when the form is clean and no cell editor is active. While an editor is active, allow Save/Discard to finish or cancel its draft even if no form change has been committed yet; this avoids requiring a separate blur before the first Save. Editing is available immediately, without a separate Edit mode. Save validates and stays on this screen; no artificial loading delay or network-success state.
 
 The grid contains the four domain columns: Nome, Perfil, Data de nascimento, and Salário mensal (R$). A narrow noneditable row-number gutter is acceptable, as shown in the chosen mockup. Column headers support Community sorting/filtering and resizing. Show a restrained selection border and fill handle using the library's renderer and theme.
 
