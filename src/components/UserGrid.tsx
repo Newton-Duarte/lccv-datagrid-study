@@ -10,6 +10,7 @@ import {
 import type {
   DataAcknowledgment,
   OperationResult,
+  SpreadsheetCellRendererParams,
 } from 'sbwb-ds-v2-aggrid'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
@@ -23,10 +24,9 @@ export type UserGridControls = {
   finishEditing(): Promise<void>
   cancelEditing(): void
   synchronizeExternalData(): void
-  revealNewRow(rowId: string): void
+  revealNewRow(rowId: string): boolean
   focusFirstError(): void
 }
-
 export type UserGridProps = {
   form: UseFormReturn<UsersFormValues>
   showAllErrors: boolean
@@ -37,6 +37,41 @@ export type UserGridProps = {
 
 type EditableColumn = 'name' | 'role' | 'birthDate' | 'numericValue'
 type PendingFocus = { rowId: string; columnId: EditableColumn }
+type UserCellRendererParams = Pick<
+  SpreadsheetCellRendererParams<UserRecord, unknown>,
+  'eGridCell' | 'value' | 'valueFormatted'
+>
+
+function UserCellContent({
+  params,
+  error,
+  errorId,
+}: {
+  params: UserCellRendererParams
+  error: string | undefined
+  errorId: string
+}): ReactElement {
+  useEffect(() => {
+    const cell = params.eGridCell
+    cell.setAttribute('aria-invalid', error === undefined ? 'false' : 'true')
+    if (error === undefined) {
+      cell.removeAttribute('aria-describedby')
+    } else {
+      cell.setAttribute('aria-describedby', errorId)
+    }
+    return () => {
+      cell.removeAttribute('aria-invalid')
+      cell.removeAttribute('aria-describedby')
+    }
+  }, [error, errorId, params.eGridCell])
+
+  const value = params.valueFormatted ?? params.value ?? ''
+  return <span>{String(value)}</span>
+}
+
+function userErrorId(rowId: string | undefined, field: EditableColumn): string {
+  return `user-error-${rowId ?? 'unknown'}-${field}`
+}
 
 const EDITABLE_COLUMNS: readonly EditableColumn[] = [
   'name',
@@ -218,16 +253,14 @@ export function UserGrid({
     (rowId: string) => {
       const api = apiRef.current
       pendingRevealRef.current = rowId
-      if (api === null) return
+      if (api === null) return false
 
       const hasFilter = isNonEmptyRecord(api.getFilterModel())
       const hasSort = api.getColumnState().some((column) => column.sort !== null)
       if (hasFilter) api.setFilterModel(null)
       if (hasSort) api.applyColumnState({ defaultState: { sort: null } })
-      if (hasFilter || hasSort) {
-        onStatusRef.current('Filtros e ordenação foram limpos para revelar o novo usuário.')
-      }
       queueMicrotask(tryRevealOrFocus)
+      return hasFilter || hasSort
     },
     [tryRevealOrFocus],
   )
@@ -261,6 +294,13 @@ export function UserGrid({
           editable: true,
           cellEditor: SpreadsheetTextEditor<UserRecord>,
           cellEditorParams: { inputAriaLabel: 'Nome do usuário' },
+          cellRendererParams: {
+            renderContent: (params: SpreadsheetCellRendererParams<UserRecord, string>) => {
+              const error = getFieldError(params.data?.id, 'name')
+              return <UserCellContent params={params} error={error} errorId={userErrorId(params.data?.id, 'name')} />
+            },
+          },
+          flex: 1.5,
           cellClassRules: {
             'user-grid-cell--invalid': ({ data }) => getFieldError(data?.id, 'name') !== undefined,
           },
@@ -273,6 +313,12 @@ export function UserGrid({
           editable: true,
           cellEditor: UserRoleEditor,
           cellEditorParams: { inputAriaLabel: 'Perfil / Cargo' },
+          cellRendererParams: {
+            renderContent: (params: SpreadsheetCellRendererParams<UserRecord, string>) => {
+              const error = getFieldError(params.data?.id, 'role')
+              return <UserCellContent params={params} error={error} errorId={userErrorId(params.data?.id, 'role')} />
+            },
+          },
           cellClassRules: {
             'user-grid-cell--invalid': ({ data }) => getFieldError(data?.id, 'role') !== undefined,
           },
@@ -285,6 +331,12 @@ export function UserGrid({
           editable: true,
           cellEditor: UserDateEditor,
           cellEditorParams: { inputAriaLabel: 'Data de nascimento' },
+          cellRendererParams: {
+            renderContent: (params: SpreadsheetCellRendererParams<UserRecord, string>) => {
+              const error = getFieldError(params.data?.id, 'birthDate')
+              return <UserCellContent params={params} error={error} errorId={userErrorId(params.data?.id, 'birthDate')} />
+            },
+          },
           valueFormatter: ({ value }) => formatBirthDate(typeof value === 'string' ? value : ''),
           cellClassRules: {
             'user-grid-cell--invalid': ({ data }) => getFieldError(data?.id, 'birthDate') !== undefined,
@@ -299,6 +351,12 @@ export function UserGrid({
           cellDataType: 'number',
           cellEditor: SpreadsheetNumberEditor<UserRecord>,
           cellEditorParams: { inputAriaLabel: 'Salário mensal em reais' },
+          cellRendererParams: {
+            renderContent: (params: SpreadsheetCellRendererParams<UserRecord, number | null>) => {
+              const error = getFieldError(params.data?.id, 'numericValue')
+              return <UserCellContent params={params} error={error} errorId={userErrorId(params.data?.id, 'numericValue')} />
+            },
+          },
           valueFormatter: ({ value }) =>
             typeof value === 'number' && Number.isFinite(value) ? salaryFormat.format(value) : '',
           cellStyle: { textAlign: 'right' },
@@ -349,7 +407,10 @@ export function UserGrid({
   )
 
   const handleResult = useCallback((result: OperationResult) => {
-    if (result.rejected.length === 0) return
+    if (result.rejected.length === 0) {
+      if (result.changes.length > 0) onStatusRef.current('Operação aplicada nesta sessão.')
+      return
+    }
     onStatusRef.current(
       result.changes.length > 0
         ? 'Algumas células não foram atualizadas. Verifique os dados informados.'
@@ -416,4 +477,3 @@ export function UserGrid({
     </div>
   )
 }
-

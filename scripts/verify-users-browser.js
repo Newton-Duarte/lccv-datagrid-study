@@ -1,6 +1,7 @@
 async (page) => {
   const failures = []
   const seedIds = new Set(Array.from({ length: 18 }, (_, index) => `user-${String(index + 1).padStart(3, '0')}`))
+  let knownRowIds = new Set(seedIds)
   const externalRequests = []
   const consoleErrors = []
 
@@ -38,6 +39,7 @@ async (page) => {
 
   const fresh = async () => {
     await page.goto('http://127.0.0.1:5187/')
+    knownRowIds = new Set(seedIds)
     await waitFor(() => page.getByText('18 registros', { exact: true }).isVisible(), 'A tela inicial não carregou')
   }
 
@@ -49,6 +51,7 @@ async (page) => {
     await waitFor(async () => !(await editor.isVisible()), `O editor ${label} não foi finalizado`)
     const expected = column === 'numericValue' && !value.includes(',') ? `${value},00` : value
     await waitFor(async () => (await cellText(id, column)).includes(expected), `A edição de ${label} não foi publicada`)
+    await waitFor(() => page.getByRole('status').allTextContents().then((texts) => texts.join(' ').includes('Operação aplicada nesta sessão.')), `A edição de ${label} não anunciou sucesso`)
   }
 
   const editTextAndSave = async (id, column, label, value) => {
@@ -83,14 +86,15 @@ async (page) => {
     await waitFor(async () => (await cellText(id, 'role')).includes('Editor'), 'A edição de perfil não foi publicada')
   }
 
-  const addDraft = async () => {
+  const addDraft = async (expectedCount = 19) => {
     await button('Novo usuário').click()
-    await waitFor(() => page.getByText('19 registros', { exact: true }).isVisible(), 'A nova linha não alterou o contador')
+    await waitFor(() => page.getByText(`${expectedCount} registros`, { exact: true }).isVisible(), 'A nova linha não alterou o contador')
     const draftId = await page.locator('.ag-row[row-id]').evaluateAll((nodes, ids) => {
       const known = new Set(ids)
       return nodes.map((node) => node.getAttribute('row-id')).find((id) => id !== null && !known.has(id)) ?? null
-    }, [...seedIds])
+    }, [...knownRowIds])
     assert(draftId !== null, 'Não foi possível encontrar o ID estável da nova linha')
+    knownRowIds.add(draftId)
     await waitFor(() => page.locator('input[aria-label="Nome do usuário"]').isVisible(), 'A nova linha não abriu o editor de Nome')
     return draftId
   }
@@ -126,6 +130,23 @@ async (page) => {
     await waitFor(() => page.getByText('Alterações descartadas', { exact: true }).isVisible(), 'Discard não anunciou restauração')
     assert((await cellText('user-001', 'name')).includes('Ana Luísa Ferreira Revisada'), 'Discard não restaurou o último baseline salvo')
 
+    await cell('user-001', 'name').dblclick()
+    const discardedEditor = page.locator('input[aria-label="Nome do usuário"]')
+    await discardedEditor.fill('Rascunho cancelado')
+    await discard().click()
+    await waitFor(() => page.getByText('Alterações descartadas', { exact: true }).isVisible(), 'Discard do editor ativo não anunciou restauração')
+    assert((await cellText('user-001', 'name')).includes('Ana Luísa Ferreira Revisada'), 'Discard do editor ativo perdeu o valor salvo')
+    assert(await save().isDisabled(), 'Discard do editor ativo deveria deixar a planilha limpa')
+    await cell('user-001', 'name').click()
+    await page.keyboard.press('Control+Z')
+    await page.waitForTimeout(120)
+    assert((await cellText('user-001', 'name')).includes('Ana Luísa Ferreira Revisada'), 'Ctrl+Z após Discard reabriu histórico anterior')
+    assert(await save().isDisabled(), 'Ctrl+Z após Discard não deveria marcar a planilha como pendente')
+    await page.keyboard.press('Control+Y')
+    await page.waitForTimeout(120)
+    assert((await cellText('user-001', 'name')).includes('Ana Luísa Ferreira Revisada'), 'Ctrl+Y após Discard alterou o valor salvo')
+    assert(await save().isDisabled(), 'Ctrl+Y após Discard não deveria marcar a planilha como pendente')
+
     await fresh()
     const nameHeader = page.getByRole('columnheader', { name: 'Nome' })
     await nameHeader.click()
@@ -140,15 +161,19 @@ async (page) => {
     await nameHeader.click()
     await page.keyboard.press('Control+Enter')
     const filterInput = page.getByRole('textbox', { name: 'Valor do Filtro' })
-    await filterInput.fill('zzzz')
-    await page.keyboard.press('Enter')
-    await page.waitForTimeout(200)
     const savedNameBeforeInvalid = await cellText('user-001', 'name')
     const savedSalaryBeforeInvalid = await cellText('user-002', 'numericValue')
+    await filterInput.fill('zzzz')
+    await page.keyboard.press('Enter')
+    await waitFor(async () => (await page.locator('.ag-row[row-id]:visible').count()) === 0, 'O filtro zzzz não exibiu o estado vazio real')
+    assert(await page.getByText('18 registros', { exact: true }).isVisible(), 'Filtrar não deveria alterar o contador de registros')
     const draftId = await addDraft()
     assert((await page.getByRole('columnheader', { name: 'Nome' }).getAttribute('aria-sort')) === 'none', 'Adicionar deveria limpar a ordenação')
     assert((await page.getByRole('textbox', { name: 'Valor do Filtro' }).count()) === 0, 'Adicionar deveria limpar o filtro')
     assert(await row(draftId).isVisible(), 'A nova linha filtrada não foi revelada')
+    assert((await cellText('user-001', 'name')).startsWith(savedNameBeforeInvalid), 'A inserção filtrada alterou o Nome seed')
+    assert((await cellText('user-002', 'numericValue')).startsWith(savedSalaryBeforeInvalid), 'A inserção filtrada alterou o Salário seed')
+    assert((await page.getByRole('status').allTextContents()).join(' ').includes('Filtros e ordenação foram limpos'), 'A inserção filtrada não anunciou o reset de visualização')
     await save().click()
     const errorSummary = page.locator('[aria-label="Resumo dos erros"]')
     await waitFor(() => errorSummary.isVisible(), 'Save inválido não revelou o resumo')
@@ -168,6 +193,67 @@ async (page) => {
     await page.keyboard.press('Control+Z')
     await page.waitForTimeout(150)
     assert(await page.getByText('18 registros', { exact: true }).isVisible(), 'Ctrl+Z reintroduziu uma linha descartada')
+
+    await fresh()
+    const namedDraftId = await addDraft()
+    const namedDraftEditor = page.locator('input[aria-label="Nome do usuário"]')
+    await namedDraftEditor.fill('Primeiro rascunho')
+    await namedDraftEditor.press('Enter')
+    await waitFor(async () => !(await namedDraftEditor.isVisible()), 'O nome do primeiro rascunho não foi finalizado')
+    await waitFor(async () => (await cellText(namedDraftId, 'name')).includes('Primeiro rascunho'), 'O nome do primeiro rascunho não foi publicado')
+    const normalEntrySummary = page.locator('[aria-label="Resumo dos erros"]')
+    if (await normalEntrySummary.count() > 0) {
+      const normalEntryText = (await normalEntrySummary.textContent()) ?? ''
+      assert(!normalEntryText.includes('Data de nascimento') && !normalEntryText.includes('Salário mensal'), 'A entrada de Nome exibiu erros intocados')
+    }
+    const untouchedDraftId = await addDraft(20)
+    assert(untouchedDraftId !== namedDraftId, 'Os dois rascunhos deveriam ter IDs distintos')
+    if (await normalEntrySummary.count() > 0) {
+      const untouchedSummaryText = (await normalEntrySummary.textContent()) ?? ''
+      assert(!untouchedSummaryText.includes('Data de nascimento') && !untouchedSummaryText.includes('Salário mensal'), 'Editar outra linha exibiu erros do rascunho intocado')
+    }
+    await save().click()
+    await waitFor(() => normalEntrySummary.isVisible(), 'Save não revelou os erros completos dos rascunhos')
+    const savedSummaryText = (await normalEntrySummary.textContent()) ?? ''
+    assert(savedSummaryText.includes('Data de nascimento') && savedSummaryText.includes('Salário mensal'), 'Save não revelou os erros intocados')
+    await discard().click()
+    await waitFor(() => page.getByText('18 registros', { exact: true }).isVisible(), 'Discard não removeu os rascunhos de validação')
+
+    await fresh()
+    const blankDraftA = await addDraft()
+    const blankDraftB = await addDraft(20)
+    assert(blankDraftA !== blankDraftB, 'Os rascunhos vazios deveriam ter IDs de domínio distintos')
+    await save().click()
+    const duplicateSummary = page.locator('[aria-label="Resumo dos erros"]')
+    await waitFor(() => duplicateSummary.isVisible(), 'Save de dois rascunhos vazios não revelou o resumo')
+    const duplicateItems = duplicateSummary.locator('li')
+    const duplicateItemTexts = await duplicateItems.allTextContents()
+    assert(duplicateItemTexts.some((text) => text.includes('Novo usuário (linha 19)')), 'O primeiro rascunho vazio não recebeu identificador de linha')
+    assert(duplicateItemTexts.some((text) => text.includes('Novo usuário (linha 20)')), 'O segundo rascunho vazio não recebeu identificador de linha')
+    const duplicateItemIds = await duplicateItems.evaluateAll((items) => items.map((item) => item.id))
+    assert(new Set(duplicateItemIds).size === duplicateItemIds.length, 'Itens de erro dos rascunhos receberam IDs duplicados')
+    const firstInvalidName = cell(blankDraftA, 'name')
+    assert(await firstInvalidName.getAttribute('aria-invalid') === 'true', 'A primeira célula inválida não expôs aria-invalid=true')
+    const firstDescriptionId = await firstInvalidName.getAttribute('aria-describedby')
+    assert(firstDescriptionId !== null && await page.locator(`#${firstDescriptionId}`).isVisible(), 'A primeira célula inválida não apontou para uma descrição visível')
+    const firstInvalidDate = cell(blankDraftA, 'birthDate')
+    await firstInvalidDate.click()
+    assert(await firstInvalidDate.getAttribute('aria-invalid') === 'true', 'A célula inválida subsequente não expôs aria-invalid=true')
+    const dateDescriptionId = await firstInvalidDate.getAttribute('aria-describedby')
+    assert(dateDescriptionId !== null && await page.locator(`#${dateDescriptionId}`).isVisible(), 'A célula inválida subsequente não apontou para uma descrição visível')
+    const errorCountBeforeCorrection = await duplicateItems.count()
+    const consoleErrorsBeforeCorrection = consoleErrors.length
+    await editText(blankDraftA, 'name', 'Nome do usuário', 'Rascunho corrigido')
+    await waitFor(async () => (await firstInvalidName.getAttribute('aria-invalid')) === 'false', 'A correção não limpou aria-invalid da célula')
+    assert((await firstInvalidName.getAttribute('aria-describedby')) === null, 'A correção deixou aria-describedby obsoleto')
+    assert(await duplicateItems.count() === errorCountBeforeCorrection - 1, 'A correção não removeu apenas o erro resolvido')
+    const correctedSummaryText = (await duplicateSummary.textContent()) ?? ''
+    assert(!correctedSummaryText.includes('Rascunho corrigido · Nome'), 'O erro de Nome corrigido permaneceu no resumo')
+    assert(correctedSummaryText.includes('Rascunho corrigido · Data de nascimento'), 'A correção removeu erros não relacionados da primeira linha')
+    assert(correctedSummaryText.includes('Novo usuário (linha 20) · Nome'), 'A correção removeu o erro de Nome da segunda linha')
+    assert(consoleErrors.length === consoleErrorsBeforeCorrection, 'A correção de um rascunho gerou erro de console')
+    await discard().click()
+    await waitFor(() => page.getByText('18 registros', { exact: true }).isVisible(), 'Discard não removeu os rascunhos duplicados')
 
     await fresh()
     const copySourceA = cell('user-003', 'name')
@@ -203,6 +289,11 @@ async (page) => {
     await waitFor(async () => (await cellText('user-003', 'numericValue')).includes('1.234,56'), 'Paste não aceitou o salário brasileiro')
     assert((await cellText('user-004', 'numericValue')).startsWith(originalB), 'Paste inválido alterou o destino rejeitado')
     assert((await page.getByRole('status').allTextContents()).join(' ').includes('Algumas células'), 'Paste misto não anunciou a rejeição')
+    await salaryA.click()
+    await page.evaluate(() => navigator.clipboard.writeText('2.222,22'))
+    await page.keyboard.press('Control+V')
+    await waitFor(async () => (await cellText('user-003', 'numericValue')).includes('2.222,22'), 'Paste válido após rejeição não publicou o salário')
+    await waitFor(() => page.getByRole('status').allTextContents().then((texts) => texts.join(' ').includes('Operação aplicada nesta sessão.')), 'Paste válido não substituiu o feedback de rejeição')
 
     await fresh()
     const fillSource = cell('user-003', 'role')
@@ -217,6 +308,7 @@ async (page) => {
     await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 6 })
     await page.mouse.up()
     await waitFor(async () => (await cellText('user-004', 'role')).includes('Visualizador'), 'Fill handle não copiou a célula')
+    await waitFor(() => page.getByRole('status').allTextContents().then((texts) => texts.join(' ').includes('Operação aplicada nesta sessão.')), 'Fill válido não anunciou sucesso')
 
     const deleteCell = cell('user-003', 'numericValue')
     await deleteCell.click()

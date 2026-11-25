@@ -122,7 +122,7 @@ export function UserDateEditor(props: UserEditorProps): ReactElement {
       ref={inputRef}
       className="user-date-editor"
       type="text"
-      inputMode="numeric"
+      inputMode="text"
       value={draft}
       aria-label="Data de nascimento"
       aria-invalid={error !== null}

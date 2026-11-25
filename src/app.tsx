@@ -34,6 +34,7 @@ export function App(): ReactElement {
   const [showAllErrors, setShowAllErrors] = useState(false)
   const [editing, setEditing] = useState(false)
   const [operationMessage, setOperationMessage] = useState('')
+  const [gridInstanceKey, setGridInstanceKey] = useState(0)
 
   const form = useForm<UsersFormValues>({
     defaultValues: initialValues,
@@ -52,17 +53,30 @@ export function App(): ReactElement {
   const onEditingChange = useCallback((active: boolean) => setEditing(active), [])
 
   const errorSummary = useMemo(() => {
-    const items: string[] = []
+    const nameCounts = new Map<string, number>()
+    users.forEach((user) => {
+      const normalizedName = user.name.trim()
+      nameCounts.set(normalizedName, (nameCounts.get(normalizedName) ?? 0) + 1)
+    })
+    const items: Array<{ id: string; text: string }> = []
     users.forEach((user, index) => {
       ERROR_FIELDS.forEach((field) => {
-        const message = getErrorMessage(form.getFieldState(`users.${index}.${field}`, formState).error)
-        if (message === undefined) return
-        const userLabel = user.name.trim() || 'Novo usuário'
-        items.push(`${userLabel} · ${ERROR_FIELD_LABELS[field]}: ${message}`)
+        const fieldState = form.getFieldState(`users.${index}.${field}`, formState)
+        if (!fieldState.error || (!showAllErrors && !fieldState.isTouched)) return
+        const message = getErrorMessage(fieldState.error) ?? 'Valor inválido.'
+        const normalizedName = user.name.trim()
+        const baseLabel = normalizedName || 'Novo usuário'
+        const userLabel = !normalizedName || (nameCounts.get(normalizedName) ?? 0) > 1
+          ? `${baseLabel} (linha ${index + 1})`
+          : baseLabel
+        items.push({
+          id: `user-error-${user.id}-${field}`,
+          text: `${userLabel} · ${ERROR_FIELD_LABELS[field]}: ${message}`,
+        })
       })
     })
     return items
-  }, [form, formState, users])
+  }, [form, formState, showAllErrors, users])
 
   const handleAddUser = useCallback(async () => {
     if (transitionRef.current) return
@@ -79,9 +93,13 @@ export function App(): ReactElement {
         shouldValidate: false,
       })
       gridControlsRef.current?.synchronizeExternalData()
-      gridControlsRef.current?.revealNewRow(draft.id)
+      const viewWasReset = gridControlsRef.current?.revealNewRow(draft.id) ?? false
       setShowAllErrors(false)
-      setOperationMessage('Novo usuário adicionado. Digite o nome para começar.')
+      setOperationMessage(
+        viewWasReset
+          ? 'Novo usuário adicionado. Filtros e ordenação foram limpos para revelar a nova linha.'
+          : 'Novo usuário adicionado. Digite o nome para começar.',
+      )
     } finally {
       transitionRef.current = false
       setTransitioning(false)
@@ -121,6 +139,8 @@ export function App(): ReactElement {
       gridControlsRef.current?.cancelEditing()
       form.reset(cloneUsers(savedBaselineRef.current))
       gridControlsRef.current?.synchronizeExternalData()
+      setGridInstanceKey((key) => key + 1)
+      setEditing(false)
       setShowAllErrors(false)
       setOperationMessage('Alterações descartadas')
     } finally {
@@ -188,11 +208,11 @@ export function App(): ReactElement {
         {errorSummary.length > 0 ? (
           <section className="user-error-summary" aria-label="Resumo dos erros" role="alert">
             <Text variant="body-sm" colorScheme="error">Corrija os campos abaixo para salvar:</Text>
-            <ul>{errorSummary.map((message) => <li key={message}>{message}</li>)}</ul>
+            <ul>{errorSummary.map((item) => <li id={item.id} key={item.id}>{item.text}</li>)}</ul>
           </section>
         ) : null}
 
-        <UserGrid form={form} showAllErrors={showAllErrors} onReady={onReady} onStatus={onStatus} onEditingChange={onEditingChange} />
+        <UserGrid key={gridInstanceKey} form={form} showAllErrors={showAllErrors} onReady={onReady} onStatus={onStatus} onEditingChange={onEditingChange} />
 
         <footer className="user-grid-footer">
           <div className="user-keyboard-hints" aria-label="Atalhos da planilha">
