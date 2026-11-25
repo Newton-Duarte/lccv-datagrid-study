@@ -9,18 +9,20 @@ Build a single main screen matching our standard list layout:
 1. **Page Header:**
    - **Left:** Section icon, title (`Usuários`), and live record counter (`X registros`).
    - **Right:** Primary action button (`Novo usuário`) that appends a new blank/default row directly to the grid and focuses its first cell for immediate typing.
-   - *(Optional)* Secondary button (`Salvar alterações` / `Descartar`) if managing dirty form state via React Hook Form.
+   - **Save/Discard:** `Salvar alterações` validates the whole sheet and updates the saved baseline; `Descartar` restores the last saved version. Manage pending changes with React Hook Form, Zod, and `zodResolver`.
 
 2. **Excel-Like DataGrid Columns (No Actions Column):**
    - **Nome (`name`):** Editable text cell (required).
    - **Perfil / Cargo (`role`):** Editable select dropdown cell (`Administrador`, `Editor`, `Visualizador`).
    - **Data de nascimento (`birthDate`):** Editable date cell formatted as `DD/MM/YYYY` (`pt-BR`).
-   - **Carga horária / Pontuação (`numericValue`):** Editable numeric cell formatted with `pt-BR` separators (e.g., `160` or `1.250,00`).
+   - **Salário mensal (R$) (`numericValue`):** Editable gross monthly salary, stored as a number and displayed as BRL with `pt-BR` separators and two decimal places (e.g., `R$ 5.420,50`). Reject negative salaries and malformed input; permit an empty draft while completing a new row, but require a salary when saving.
 
 3. **Spreadsheet Behavior:**
-   - Enable the library's Spreadsheet module (cell range selection, keyboard navigation with Arrow/Enter/Tab keys, copy/paste, and direct cell editing).
+   - Connect the library's `useSpreadsheet` hook (cell range selection, keyboard navigation with Arrow/Enter/Tab keys, copy/paste, and direct cell editing).
    - No per-row "Ações" column—keep the table clean and spreadsheet-focused.
 
 ## Data & Persistence
 - Seed the grid with 15–20 realistic Brazilian user records in `src/data/mockUsers.ts`.
-- All additions and inline cell edits persist locally in browser memory.
+- React Hook Form owns all additions and inline cell edits in browser memory.
+- Saving validates required names, valid profiles and dates, and nonnegative salaries, then updates an in-memory saved baseline. Discarding restores that baseline, including undoing unsaved row additions.
+- Refreshing the page reloads the mock data; Save does not write to a backend or browser storage.
