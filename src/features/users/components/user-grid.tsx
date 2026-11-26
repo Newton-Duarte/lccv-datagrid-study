@@ -20,7 +20,7 @@ import { BRL_FORMAT } from '../../../utils/currency.ts'
 import { DateEditor } from './editors/date-editor.tsx'
 import { RoleEditor } from './editors/role-editor.tsx'
 import { UserCellContent } from './user-cell-content.tsx'
-import { userErrorId } from '../utils/validation.ts'
+import { isVisibleUserError, userErrorId } from '../utils/validation.ts'
 
 type PendingFocus = { rowId: string; columnId: UserField }
 type UserCellRendererParams = Pick<
@@ -64,7 +64,8 @@ export function UserGrid({
       const index = form.getValues('users').findIndex((row) => row.id === rowId)
       if (index < 0) return undefined
       const state = form.getFieldState(`users.${index}.${field}`)
-      if (!state.error || (!showAllErrorsRef.current && !state.isTouched)) return undefined
+      if (!isVisibleUserError(state, showAllErrorsRef.current)) return undefined
+      if (state.error === undefined) return undefined
       return typeof state.error.message === 'string' ? state.error.message : 'Valor inválido.'
     },
     [form],
@@ -302,10 +303,10 @@ export function UserGrid({
   const controls = useMemo<UserGridControls>(() => ({ finishEditing, cancelEditing, synchronizeExternalData, revealNewRow, focusFirstError }), [cancelEditing, finishEditing, focusFirstError, revealNewRow, synchronizeExternalData])
   useEffect(() => onReady(controls), [controls, onReady])
 
-  const errors = form.formState.errors
+  const { errors, touchedFields } = form.formState
   useEffect(() => {
     apiRef.current?.refreshCells({ force: true })
-  }, [errors, showAllErrors, users])
+  }, [errors, touchedFields, showAllErrors, users])
 
   /* eslint-disable react-hooks/immutability */
   const attachSpreadsheetHost = useCallback((element: HTMLDivElement | null) => {

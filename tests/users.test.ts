@@ -8,6 +8,7 @@ import {
 import type { UserRecord, UsersFormValues } from '../src/features/users/types.ts'
 import { usersFormSchema } from '../src/features/users/schema.ts'
 import { SALARY_PARSER, USER_BINDINGS } from '../src/features/users/grid/user-bindings.ts'
+import { isVisibleUserError } from '../src/features/users/utils/validation.ts'
 import { BRL_FORMAT } from '../src/utils/currency.ts'
 import { formatDateBR, parseDateInput } from '../src/utils/date.ts'
 
@@ -156,4 +157,12 @@ test('exposes stable immutable bindings with localized numeric parsing', () => {
   assert.equal(changedSalary.salary, 0.123456789)
   assert.equal(sourceRow.salary, 9850)
   assert.equal(salaryBinding.write!(sourceRow, '5.420,50'), sourceRow)
+})
+
+test('shares touched-field visibility between validation summary and grid cells', () => {
+  const state = { error: { message: 'Nome é obrigatório.' }, isTouched: false }
+  assert.equal(isVisibleUserError(state, false), false)
+  assert.equal(isVisibleUserError({ ...state, isTouched: true }, false), true)
+  assert.equal(isVisibleUserError(state, true), true)
+  assert.equal(isVisibleUserError({ error: undefined, isTouched: true }, true), false)
 })

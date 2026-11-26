@@ -1,6 +1,6 @@
 import { Input } from '@sbwb-design-system/ui-core'
 import { useGridCellEditor } from 'ag-grid-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactElement } from 'react'
 import { formatDateBR, parseDateInput } from '../../../../utils/date.ts'
 import type { UserCellEditorProps } from '../../grid/editor-types.ts'
@@ -21,7 +21,8 @@ export function DateEditor(props: UserCellEditorProps): ReactElement {
   const draftRef = useRef<string | null>(initialDraft)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  useEditorDraft(props, draftRef, [inputRef])
+  const ownedRoots = useMemo(() => [inputRef] as const, [])
+  useEditorDraft(props, draftRef, ownedRoots)
 
   useGridCellEditor({
     isCancelAfterEnd: () => error !== null,

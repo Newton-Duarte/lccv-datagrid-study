@@ -9,6 +9,13 @@ export type UserValidationError = {
   text: string
 }
 
+export function isVisibleUserError(
+  state: { error?: unknown; isTouched: boolean },
+  showAllErrors: boolean,
+): boolean {
+  return state.error !== undefined && (showAllErrors || state.isTouched)
+}
+
 export function userErrorId(rowId: string | undefined, field: UserField): string {
   return `user-error-${rowId ?? 'unknown'}-${field}`
 }
@@ -35,7 +42,7 @@ export function getVisibleUserErrors(
   users.forEach((user, index) => {
     USER_FIELDS.forEach((field) => {
       const fieldState = form.getFieldState(`users.${index}.${field}`, formState)
-      if (!fieldState.error || (!showAllErrors && !fieldState.isTouched)) return
+      if (!isVisibleUserError(fieldState, showAllErrors)) return
       const normalizedName = user.name.trim()
       const baseLabel = normalizedName || 'Novo usuário'
       const rowLabel = !normalizedName || (nameCounts.get(normalizedName) ?? 0) > 1

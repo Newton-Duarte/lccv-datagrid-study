@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactElement } from 'react'
 import { USER_ROLES } from '../../constants.ts'
 import type { UserRole } from '../../types.ts'
@@ -15,7 +15,8 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
   const [draft, setDraft] = useState<string>(() => String(initialValue))
   const draftRef = useRef<string | null>(String(initialValue))
   const inputRef = useRef<HTMLSelectElement | null>(null)
-  useEditorDraft(props, draftRef, [inputRef])
+  const ownedRoots = useMemo(() => [inputRef] as const, [])
+  useEditorDraft(props, draftRef, ownedRoots)
 
   useEffect(() => {
     inputRef.current?.focus({ preventScroll: true })
