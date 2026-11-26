@@ -69,6 +69,23 @@ async (page) => {
       label: document.activeElement?.getAttribute('aria-label'),
     }))
     assert(deferredTabFocus.tag === 'BUTTON' && deferredTabFocus.label === 'Abrir calendário', 'Tab não moveu o foco para o gatilho do calendário adiado')
+    const deferredReject = deferredFixture.getByRole('button', { name: 'Rejeitar valor adiado', exact: true })
+    await deferredReject.click()
+    await waitFor(async () => (await deferredPending.textContent()) === '1988-03-14', 'O controle adiado não restaurou o valor rejeitado')
+    assert(await deferredOutput.textContent() === '1988-03-14', 'Rejeitar alterou o valor controlado')
+    const deferredRejectFocus = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      text: document.activeElement?.textContent?.trim(),
+    }))
+    assert(deferredRejectFocus.tag === 'BUTTON' && deferredRejectFocus.text === 'Rejeitar valor adiado', 'Rejeitar perdeu o foco para o input')
+    await deferredInput.click()
+    await deferredInput.press('Control+A')
+    await page.keyboard.type('15021990')
+    await deferredInput.press('Control+A')
+    await deferredInput.press('Backspace')
+    await waitFor(async () => (await deferredPending.textContent()) === '', 'O controle adiado não preparou a segunda limpeza pendente')
+    await deferredInput.press('Tab')
+    await waitFor(async () => (await deferredBlurs.textContent()) === '2', 'O segundo blur público não foi encaminhado após a rejeição')
     const deferredApply = deferredFixture.getByRole('button', { name: 'Aplicar valor adiado', exact: true })
     await deferredApply.click()
     await waitFor(async () => (await deferredOutput.textContent()) === '', 'Aplicar não publicou o valor vazio adiado')
@@ -79,9 +96,22 @@ async (page) => {
     }))
     assert(deferredApplyFocus.tag === 'BUTTON' && deferredApplyFocus.text === 'Aplicar valor adiado', 'Aplicar perdeu o foco para o input remountado')
 
+    await dateInput.click()
+    await button('Forçar rerender independente').click()
+    await waitFor(async () => (await page.getByTestId('fixture-rerender-version').textContent()) === '1', 'Fixture não realizou o rerender com ref inline')
+    const inlineRefRerenderFocus = await page.evaluate(() => ({
+      label: document.activeElement?.getAttribute('aria-label'),
+      value: document.activeElement instanceof HTMLInputElement ? document.activeElement.value : undefined,
+    }))
+    assert(inlineRefRerenderFocus.label === 'Data controlada' && inlineRefRerenderFocus.value === '14/03/1988', 'Rerender com ref inline moveu o foco para fora do input')
     await button('Limpar data externa').click()
     await waitFor(async () => (await dateOutput.textContent()) === '', 'Limpeza externa não atualizou o valor ISO')
     assert(await dateInput.inputValue() === '', 'Limpeza externa não limpou o input visível')
+    const inlineRefExternalClearFocus = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      text: document.activeElement?.textContent?.trim(),
+    }))
+    assert(inlineRefExternalClearFocus.tag === 'BUTTON' && inlineRefExternalClearFocus.text === 'Limpar data externa', 'Limpeza externa após ref inline roubou o foco para o input remountado')
 
     await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
     await page.getByRole('button', { name: 'segunda-feira, 14 de março de 1988' }).click()
@@ -117,7 +147,7 @@ async (page) => {
     await dateInput.press('Control+A')
     await page.keyboard.type('1')
     await button('Forçar rerender independente').click()
-    await waitFor(async () => (await page.getByTestId('fixture-rerender-version').textContent()) === '1', 'Fixture não realizou o rerender independente')
+    await waitFor(async () => (await page.getByTestId('fixture-rerender-version').textContent()) === '2', 'Fixture não realizou o segundo rerender independente')
     assert(await dateInput.inputValue() === '1', 'Rerender externo apagou o rascunho parcial do fixture')
     assert(await dateOutput.textContent() === '1988-03-14', 'Rerender externo alterou o ISO sem uma conversão válida')
     await button('Restaurar data externa').click()

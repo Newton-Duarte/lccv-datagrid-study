@@ -95,8 +95,8 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
   }
 
   const setInputRef = useCallback((node: HTMLInputElement | null): void => {
-    if (node === null && inputNodeRef.current !== null && document.activeElement === inputNodeRef.current) {
-      restoreInputFocusRef.current = true
+    if (node === null) {
+      restoreInputFocusRef.current = inputNodeRef.current !== null && document.activeElement === inputNodeRef.current
     }
     inputNodeRef.current = node
     if (typeof ref === 'function') ref(node)

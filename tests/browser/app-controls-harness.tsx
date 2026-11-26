@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { Button, Text } from '@sbwb-design-system/ui-core'
-import { StrictMode, useState } from 'react'
+import { StrictMode, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AppDatePicker } from '../../src/components/app-datepicker.tsx'
 import { AppSelect } from '../../src/components/app-select.tsx'
@@ -22,6 +22,7 @@ function AppControlsHarness() {
   const [deferredBlurCount, setDeferredBlurCount] = useState(0)
   const [selection, setSelection] = useState('')
   const [rerenderVersion, setRerenderVersion] = useState(0)
+  const inlineDateInputRef = useRef<HTMLInputElement | null>(null)
 
   return (
     <main className="sw:flex sw:flex-col sw:gap-6 sw:p-6">
@@ -31,6 +32,7 @@ function AppControlsHarness() {
           value={date}
           onValueChange={setDate}
           ariaLabel="Data controlada"
+          ref={(node) => { inlineDateInputRef.current = node }}
           calendarProps={{ defaultMonth: isoToLocalDate('1988-03-14') }}
         />
         <div className="sw:flex sw:flex-wrap sw:gap-2">
@@ -60,6 +62,7 @@ function AppControlsHarness() {
           inputProps={{ onBlur: () => setDeferredBlurCount((count) => count + 1) }}
         />
         <div className="sw:flex sw:flex-wrap sw:gap-2">
+          <Button type="button" onClick={() => setDeferredValue(deferredDate)}>Rejeitar valor adiado</Button>
           <Button type="button" onClick={() => setDeferredDate(deferredValue)}>Aplicar valor adiado</Button>
         </div>
         <output aria-label="Valor ISO controlado adiado" data-testid="deferred-date-output">
