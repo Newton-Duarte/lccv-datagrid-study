@@ -16,6 +16,8 @@ export function DateEditor(props: UserCellEditorProps): ReactElement {
   const draftRef = useRef<string | null>(initialDraft)
   const [error, setError] = useState<string | null>(null)
   const errorRef = useRef<string | null>(null)
+  const cancelEditRef = useRef(false)
+  const seedScheduledRef = useRef(false)
   const editorRootRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -24,24 +26,29 @@ export function DateEditor(props: UserCellEditorProps): ReactElement {
   useEditorDraft(props, draftRef, ownedRoots)
 
   useGridCellEditor({
-    isCancelAfterEnd: () => errorRef.current !== null,
+    isCancelAfterEnd: () => cancelEditRef.current || errorRef.current !== null,
     getValidationErrors: () => (errorRef.current === null ? null : [errorRef.current]),
   })
 
+  const restoreGridFocus = (): void => {
+    queueMicrotask(() => props.eGridCell.focus({ preventScroll: true }))
+  }
+
   useEffect(() => {
     inputRef.current?.focus({ preventScroll: true })
-    if (initialDraft === '' || initialDraft === formatDateBR(committedValue)) return
+    if (seedScheduledRef.current || initialDraft === '' || initialDraft === formatDateBR(committedValue)) return
 
     // AG Grid may start an edit with the first typed character. The DS input
     // owns its masked draft, so seed that character through its public input
     // event after the control mounts instead of replacing its controlled value.
     const input = inputRef.current
     if (input === null) return
-    const seedInput = window.setTimeout(() => {
+    seedScheduledRef.current = true
+    queueMicrotask(() => {
+      if (inputRef.current !== input) return
       input.value = initialDraft
       input.dispatchEvent(new Event('input', { bubbles: true }))
-    }, 0)
-    return () => window.clearTimeout(seedInput)
+    })
   }, [committedValue, initialDraft])
 
   const publish = (value: string, raw: string): void => {
@@ -68,19 +75,20 @@ export function DateEditor(props: UserCellEditorProps): ReactElement {
     publish(value, formatDateBR(value))
     setOpen(false)
     props.stopEditing(false)
+    restoreGridFocus()
   }
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'Escape') {
       event.preventDefault()
+      cancelEditRef.current = true
       setOpen(false)
-      props.stopEditing(true, event.nativeEvent)
+      props.stopEditing()
+      restoreGridFocus()
       return
     }
 
     if (event.key === 'Enter' || event.key === 'Tab') {
-      const parsed = parseDateInput(event.currentTarget.value)
-      if (parsed.ok) publish(parsed.value, event.currentTarget.value)
       if (event.key === 'Enter') {
         // DatePickerInput prevents Enter internally after parsing its draft;
         // call the grid's public stop path explicitly so the newest value is
@@ -112,7 +120,15 @@ export function DateEditor(props: UserCellEditorProps): ReactElement {
           'aria-describedby': error === null ? undefined : 'user-date-editor-error',
           onKeyDown: handleInputKeyDown,
         }}
-        contentProps={{ className: 'ag-custom-component-popup user-date-editor__content' }}
+        contentProps={{
+          className: 'ag-custom-component-popup user-date-editor__content',
+          onEscapeKeyDown: () => {
+            cancelEditRef.current = true
+            setOpen(false)
+            props.stopEditing()
+            restoreGridFocus()
+          },
+        }}
       />
       {error === null ? null : (
         <span id="user-date-editor-error" className="sw:sr-only">

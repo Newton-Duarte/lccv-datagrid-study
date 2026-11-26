@@ -13,10 +13,9 @@ import type {
   DatePickerInputGroupProps,
   DatePickerInputProps,
 } from '@sbwb-design-system/ui-core'
-import { forwardRef, useCallback, useEffect, useMemo, useRef } from 'react'
+import { forwardRef, useMemo } from 'react'
 import type { ChangeEvent, FocusEvent, KeyboardEvent, ReactElement, RefObject } from 'react'
 import {
-  formatDateBR,
   isValidIsoDate,
   isoToLocalDate,
   localDateToIso,
@@ -56,6 +55,10 @@ function dateFromIso(value: string): Date | undefined {
   return value === '' || !isValidIsoDate(value) ? undefined : isoToLocalDate(value)
 }
 
+function isWithinBounds(value: string, minDate: string, maxDate: string): boolean {
+  return (minDate === '' || value >= minDate) && (maxDate === '' || value <= maxDate)
+}
+
 export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(function AppDatePicker(
   {
     value,
@@ -78,29 +81,16 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
   },
   ref,
 ): ReactElement {
-  const inputNodeRef = useRef<HTMLInputElement | null>(null)
-  const previousValueRef = useRef(value)
   const selectedDate = useMemo(() => dateFromIso(value), [value])
   const minimumDate = useMemo(() => dateFromIso(minDate), [minDate])
   const maximumDate = useMemo(() => dateFromIso(maxDate), [maxDate])
-
-  const setInputRef = useCallback((node: HTMLInputElement | null): void => {
-    inputNodeRef.current = node
-    if (typeof ref === 'function') ref(node)
-    else if (ref) ref.current = node
-  }, [ref])
-
-  useEffect(() => {
-    if (previousValueRef.current === value) return
-    previousValueRef.current = value
-    const input = inputNodeRef.current
-    if (input === null) return
-    const next = value === '' ? '' : formatDateBR(value)
-    const syncInput = window.setTimeout(() => {
-      if (input.value !== next) input.value = next
-    }, 0)
-    return () => window.clearTimeout(syncInput)
-  }, [value])
+  const inputKey = value === '' ? 'empty' : 'filled'
+  const effectiveCalendarProps = {
+    ...calendarProps,
+    captionLayout: calendarProps?.captionLayout ?? 'dropdown',
+    startMonth: minimumDate ?? calendarProps?.startMonth,
+    endMonth: maximumDate ?? calendarProps?.endMonth,
+  }
 
   const handlePickerChange = (date: Date | undefined): void => {
     onValueChange(localDateToIso(date))
@@ -108,7 +98,15 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
     const raw = event.currentTarget.value
-    const parsed = parseDateInput(raw)
+    const syntax = parseDateInput(raw)
+    const parsed = syntax.ok && syntax.value !== '' && !isWithinBounds(syntax.value, minDate, maxDate)
+      ? {
+        ok: false as const,
+        message: minDate !== '' && syntax.value < minDate
+          ? 'A data informada está antes do limite permitido.'
+          : 'A data informada está depois do limite permitido.',
+      }
+      : syntax
     onDraftChange?.(raw, parsed)
     if (parsed.ok) onValueChange(parsed.value)
     inputProps?.onChange?.(event)
@@ -128,6 +126,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
 
   return (
     <DatePicker
+      key={inputKey}
       value={selectedDate}
       minDate={minimumDate}
       maxDate={maximumDate}
@@ -147,7 +146,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
       >
         <DatePickerInput
           {...inputProps}
-          ref={setInputRef}
+          ref={ref}
           aria-label={ariaLabel}
           disabled={disabled}
           onChange={handleInputChange}
@@ -162,7 +161,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
       </DatePickerInputGroup>
       <DatePickerContent {...contentProps} ref={contentRef}>
         <DatePickerCalendar
-          {...calendarProps}
+          {...effectiveCalendarProps}
           labels={{ ...calendarLabels, ...calendarProps?.labels }}
           closeOnSelect
           onDateSelect={handleCalendarSelect}

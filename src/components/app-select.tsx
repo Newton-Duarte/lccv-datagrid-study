@@ -70,7 +70,7 @@ export const AppSelect = forwardRef<HTMLButtonElement, AppSelectProps>(function 
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent {...contentProps} ref={contentRef}>
-        {options.map((option) => (
+        {options.filter((option) => option.value !== '').map((option) => (
           <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
             {option.label}
           </SelectItem>

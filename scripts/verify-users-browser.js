@@ -45,7 +45,8 @@ async (page) => {
 
   const exerciseSharedControls = async () => {
     await page.goto('http://127.0.0.1:5187/tests/browser/app-controls.html')
-    const dateInput = page.getByRole('textbox', { name: 'Data controlada' })
+    const dateFixture = page.getByRole('region', { name: 'Fixture do seletor de data', exact: true })
+    const dateInput = dateFixture.getByRole('textbox', { name: 'Data controlada' })
     const dateOutput = page.getByTestId('controlled-date-output')
     await waitFor(async () => (await dateOutput.textContent()) === '1988-03-14', 'Fixture não iniciou com a data ISO esperada')
     assert(await dateInput.inputValue() === '14/03/1988', 'Fixture não exibiu a data inicial em pt-BR')
@@ -54,13 +55,18 @@ async (page) => {
     await waitFor(async () => (await dateOutput.textContent()) === '', 'Limpeza externa não atualizou o valor ISO')
     assert(await dateInput.inputValue() === '', 'Limpeza externa não limpou o input visível')
 
-    await page.getByRole('button', { name: 'Abrir calendário' }).click()
+    await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
     await page.getByRole('button', { name: 'segunda-feira, 14 de março de 1988' }).click()
     await waitFor(async () => (await dateOutput.textContent()) === '1988-03-14', 'Seleção do calendário não atualizou o valor ISO')
     assert(await dateInput.inputValue() === '14/03/1988', 'Seleção do calendário não atualizou o input visível')
     await waitFor(async () => (await page.locator('[role=dialog]').count()) === 0, 'Seleção do calendário não fechou o popup')
 
     await button('Limpar data externa').click()
+    await waitFor(async () => (await dateOutput.textContent()) === '', 'A segunda limpeza externa não atualizou o valor ISO')
+    assert(await dateInput.inputValue() === '', 'A segunda limpeza externa deixou uma data visual antiga')
+    await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    assert(await page.locator('[role=dialog] [aria-selected="true"]').count() === 0, 'A segunda limpeza externa deixou um dia selecionado no calendário')
+    await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
     await button('Restaurar data externa').click()
     assert(await dateOutput.textContent() === '1988-03-14', 'Restauro externo não recuperou o valor ISO')
     await waitFor(async () => (await dateInput.inputValue()) === '14/03/1988', 'Restauro externo não sincronizou o input visível')
@@ -81,9 +87,21 @@ async (page) => {
     await waitFor(async () => (await dateOutput.textContent()) === '', 'Limpeza digitada não atualizou o valor ISO')
     await waitFor(async () => (await dateInput.inputValue()) === '', 'Limpeza digitada não limpou o input visível')
 
+    const boundedInput = page.getByRole('textbox', { name: 'Data com limites' })
+    const boundedOutput = page.getByTestId('bounded-date-output')
+    await boundedInput.fill('31/12/1999')
+    await boundedInput.press('Enter')
+    await waitFor(async () => (await boundedInput.inputValue()) === '15/06/2000', 'Data digitada abaixo do minDate não voltou ao valor aceito')
+    assert(await boundedOutput.textContent() === '2000-06-15', 'Data digitada abaixo do minDate foi publicada')
+    await boundedInput.fill('01/01/2001')
+    await boundedInput.press('Enter')
+    await waitFor(async () => (await boundedInput.inputValue()) === '15/06/2000', 'Data digitada acima do maxDate não voltou ao valor aceito')
+    assert(await boundedOutput.textContent() === '2000-06-15', 'Data digitada acima do maxDate foi publicada')
+
     const select = page.getByRole('combobox', { name: 'Seleção genérica' })
     const selectOutput = page.getByTestId('controlled-select-output')
     await select.click()
+    assert(await page.getByRole('option', { name: 'Opção vazia inválida' }).count() === 0, 'AppSelect renderizou um SelectItem com value vazio')
     await page.getByRole('option', { name: 'Opção A' }).click()
     await waitFor(async () => (await selectOutput.textContent()) === 'a', 'AppSelect não publicou a opção genérica')
     await button('Limpar seleção externa').click()
@@ -123,6 +141,18 @@ async (page) => {
     })
     assert(geometry !== null, `${label}: não foi possível medir card e grid`)
     assert(geometry.hostLeft >= geometry.cardLeft - 1 && geometry.hostRight <= geometry.cardRight + 1, `${label}: host da grade excede o card`)
+  }
+
+  const assertEditorFitsCell = async (label, cellLocator, editorLocator) => {
+    await waitFor(async () => {
+      const cellBox = await cellLocator.boundingBox()
+      const editorBox = await editorLocator.boundingBox()
+      return cellBox !== null && editorBox !== null
+        && editorBox.x >= cellBox.x - 1
+        && editorBox.x + editorBox.width <= cellBox.x + cellBox.width + 1
+        && editorBox.y >= cellBox.y - 1
+        && editorBox.y + editorBox.height <= cellBox.y + cellBox.height + 1
+    }, `${label}: editor não coube na célula`)
   }
 
   const editRoleWithKeyboard = async (id) => {
@@ -384,11 +414,51 @@ async (page) => {
     await waitFor(async () => !(await unchangedRoleEditor.isVisible()), 'Escolher o perfil já selecionado não encerrou a edição')
     assert((await cellText('user-001', 'role')).includes('Administrador'), 'Escolher o perfil já selecionado alterou o valor')
 
+    await fresh()
+    const mouseRoleCell = cell('user-003', 'role')
+    await mouseRoleCell.dblclick()
+    const mouseRoleEditor = page.locator('button[role="combobox"][aria-label="Perfil"]')
+    await assertEditorFitsCell('perfil', mouseRoleCell, mouseRoleEditor)
+    await page.getByRole('option', { name: 'Administrador' }).click()
+    await waitFor(async () => (await cellText('user-003', 'role')).includes('Administrador'), 'A seleção de perfil por mouse não publicou na linha estável')
+    assert((await cellText('user-004', 'role')).includes('Editor'), 'A seleção de perfil por mouse alterou outra linha')
+    const roleFocus = await page.evaluate(() => ({
+      rowId: document.activeElement?.closest('.ag-row')?.getAttribute('row-id'),
+      columnId: document.activeElement?.closest('.ag-cell')?.getAttribute('col-id'),
+    }))
+    assert(roleFocus.rowId === 'user-003' && roleFocus.columnId === 'role', 'Commit de perfil não devolveu o foco à célula estável')
+
     await cell('user-001', 'birthDate').click()
+    await page.waitForTimeout(100)
     await page.keyboard.type('1')
     const firstCharacterDate = page.locator('input[aria-label="Data de nascimento"]')
     await waitFor(async () => (await firstCharacterDate.inputValue()) === '1', 'A primeira tecla não chegou ao editor de data')
-    await firstCharacterDate.press('Escape')
+    await page.keyboard.type('5021990')
+    assert(await firstCharacterDate.inputValue() === '15/02/1990', 'A sequência iniciada pelo eventKey perdeu ou duplicou o primeiro dígito')
+    await firstCharacterDate.press('Enter')
+    await waitFor(async () => (await cellText('user-001', 'birthDate')).includes('15/02/1990'), 'A edição iniciada pelo primeiro caractere não publicou a data completa')
+
+    await fresh()
+    const escapeDateCell = cell('user-003', 'birthDate')
+    await escapeDateCell.dblclick()
+    const escapeDateInput = page.locator('input[aria-label="Data de nascimento"]')
+    await escapeDateInput.press('Control+A')
+    await page.keyboard.type('15021990')
+    await escapeDateInput.press('Escape')
+    await waitFor(async () => !(await escapeDateInput.isVisible()), 'Escape não cancelou o editor de data com rascunho válido')
+    await waitFor(async () => (await cellText('user-003', 'birthDate')).includes('08/12/1979'), 'Escape publicou uma data válida que deveria ser cancelada')
+    const escapeFocus = await page.evaluate(() => ({
+      rowId: document.activeElement?.closest('.ag-row')?.getAttribute('row-id'),
+      columnId: document.activeElement?.closest('.ag-cell')?.getAttribute('col-id'),
+    }))
+    assert(escapeFocus.rowId === 'user-003' && escapeFocus.columnId === 'birthDate', 'Escape não devolveu o foco à célula de data cancelada')
+
+    await escapeDateCell.dblclick()
+    const popupEscapeInput = page.locator('input[aria-label="Data de nascimento"]')
+    await page.getByRole('button', { name: 'Abrir calendário' }).click()
+    await page.keyboard.press('Escape')
+    await waitFor(async () => !(await popupEscapeInput.isVisible()), 'Escape no popup não cancelou o editor de data')
+    assert((await cellText('user-003', 'birthDate')).includes('08/12/1979'), 'Escape no popup publicou uma data não escolhida')
 
     await cell('user-003', 'birthDate').dblclick()
     const sequentialDate = page.locator('input[aria-label="Data de nascimento"]')
@@ -444,22 +514,18 @@ async (page) => {
       tomorrow.setDate(now.getDate() + 1)
       const format = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
       return {
-        months: (now.getFullYear() - 1988) * 12 + now.getMonth() - 2,
+        year: now.getFullYear(),
+        month: now.getMonth(),
         tomorrowLabel: format.format(tomorrow),
       }
     })
+    await maxCalendar.getByRole('combobox', { name: 'Selecionar ano' }).selectOption(String(maxNavigation.year))
+    await maxCalendar.getByRole('combobox', { name: 'Selecionar mês' }).selectOption(String(maxNavigation.month))
     const nextMonth = maxCalendar.getByRole('button', { name: 'Próximo mês' })
-    for (let month = 0; month < maxNavigation.months; month += 1) await nextMonth.click()
     const tomorrowButton = maxCalendar.locator(`button[aria-label="${maxNavigation.tomorrowLabel}"]`)
     assert(await tomorrowButton.isDisabled(), 'A data posterior a hoje não foi desabilitada pelo maxDate da feature')
     assert(await maxDateInput.inputValue() === '14/03/1988', 'Navegar até o mês limite alterou a data armazenada')
-    await nextMonth.click()
-    const futureMonthDays = maxCalendar.locator('button[aria-label*=" de "]')
-    const futureDaysDisabled = await futureMonthDays.evaluateAll((buttons) => {
-      const dayButtons = buttons.filter((button) => !button.getAttribute('aria-label')?.includes('Mês'))
-      return dayButtons.length > 0 && dayButtons.every((button) => button.disabled)
-    })
-    assert(futureDaysDisabled, 'A navegação para o mês futuro expôs dias selecionáveis além do maxDate')
+    assert(await nextMonth.isDisabled(), 'A navegação para um mês além do maxDate não foi bloqueada')
     await maxDateInput.press('Escape')
     await waitFor(async () => !(await maxDateInput.isVisible()), 'Escape não fechou o calendário no limite maxDate')
 
@@ -469,10 +535,18 @@ async (page) => {
     await calendarDate.press('Control+A')
     await page.keyboard.type('29022000')
     assert(await calendarDate.inputValue() === '29/02/2000', 'A preparação do calendário não manteve a data de referência')
+    await assertEditorFitsCell('data', cell('user-003', 'birthDate'), page.locator('.app-datepicker__group'))
     await page.getByRole('button', { name: 'Abrir calendário' }).click()
+    const desktopPopupBox = await page.locator('.user-date-editor__content').boundingBox()
+    assert(desktopPopupBox !== null && desktopPopupBox.x >= 0 && desktopPopupBox.x + desktopPopupBox.width <= 1440, 'Popup de data desktop excedeu o viewport')
     await page.getByRole('button', { name: 'segunda-feira, 14 de fevereiro de 2000' }).click()
     await waitFor(async () => !(await calendarDate.isVisible()), 'A seleção de calendário não finalizou a data')
     assert((await cellText('user-003', 'birthDate')).includes('14/02/2000'), 'A seleção de calendário não publicou o dia escolhido')
+    const calendarFocus = await page.evaluate(() => ({
+      rowId: document.activeElement?.closest('.ag-row')?.getAttribute('row-id'),
+      columnId: document.activeElement?.closest('.ag-cell')?.getAttribute('col-id'),
+    }))
+    assert(calendarFocus.rowId === 'user-003' && calendarFocus.columnId === 'birthDate', 'Commit de calendário não devolveu o foco à célula de data')
 
     await fresh()
     await cell('user-003', 'birthDate').dblclick()
@@ -491,6 +565,19 @@ async (page) => {
     }))
     assert(!narrow.documentOverflow, 'A página estreita tem overflow horizontal global')
     assert(narrow.gridOverflow, 'A grade estreita perdeu sua rolagem horizontal')
+    await cell('user-001', 'birthDate').dblclick()
+    const narrowDateInput = page.locator('input[aria-label="Data de nascimento"]')
+    await assertEditorFitsCell('data estreita', cell('user-001', 'birthDate'), page.locator('.app-datepicker__group'))
+    await page.getByRole('button', { name: 'Abrir calendário' }).click()
+    await page.waitForTimeout(800)
+    const narrowPopupBox = await page.locator('.user-date-editor__content').boundingBox()
+    const narrowCardBox = await page.locator('.user-card').boundingBox()
+    assert(narrowPopupBox !== null && narrowCardBox !== null, 'Popup estreito não permitiu medir viewport e card')
+    assert(narrowPopupBox.x >= 0 && narrowPopupBox.x + narrowPopupBox.width <= 391, 'Popup estreito excedeu o viewport de 390px')
+    assert(narrowPopupBox.x + narrowPopupBox.width > narrowCardBox.x + narrowCardBox.width, 'Popup estreito não escapou do clipping do card')
+    await page.screenshot({ path: '/tmp/users-date-popup-mobile-settled.png' })
+    await narrowDateInput.press('Escape')
+    await waitFor(async () => !(await narrowDateInput.isVisible()), 'Escape não fechou o popup estreito')
     await page.screenshot({ path: '/tmp/cadastro-usuarios-narrow.png', fullPage: true })
 
     await page.setViewportSize({ width: 1440, height: 1000 })

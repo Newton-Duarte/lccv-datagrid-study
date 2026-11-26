@@ -1,3 +1,4 @@
+import { useGridCellEditor } from 'ag-grid-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactElement } from 'react'
 import { AppSelect } from '../../../../components/app-select.tsx'
@@ -13,6 +14,7 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const cancelCloseRef = useRef(false)
+  const cancelEditRef = useRef(false)
   const valueCommitRef = useRef(false)
   const [open, setOpen] = useState(true)
   const options = useMemo(
@@ -21,6 +23,13 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
   )
   const ownedRoots = useMemo(() => [editorRootRef, contentRef] as const, [])
   useEditorDraft(props, draftRef, ownedRoots)
+  useGridCellEditor({
+    isCancelAfterEnd: () => cancelEditRef.current,
+  })
+
+  const restoreGridFocus = (): void => {
+    queueMicrotask(() => props.eGridCell.focus({ preventScroll: true }))
+  }
 
   useEffect(() => {
     triggerRef.current?.focus({ preventScroll: true })
@@ -33,6 +42,7 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
     props.onValueChange(value)
     setOpen(false)
     props.stopEditing(false)
+    restoreGridFocus()
   }
 
   const handleOpenChange = (nextOpen: boolean): void => {
@@ -49,14 +59,17 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
     // chosen. Closing the picker is still an explicit profile confirmation.
     props.onValueChange(draftRef.current ?? '')
     props.stopEditing(false)
+    restoreGridFocus()
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === 'Escape') {
       event.preventDefault()
       cancelCloseRef.current = true
+      cancelEditRef.current = true
       setOpen(false)
-      props.stopEditing(true, event.nativeEvent)
+      props.stopEditing()
+      restoreGridFocus()
       return
     }
 

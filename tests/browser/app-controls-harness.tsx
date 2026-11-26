@@ -9,12 +9,14 @@ import '../../src/globals.css'
 import 'sbwb-ds-v2-aggrid/styles/theme.css'
 
 const OPTIONS = [
+  { value: '', label: 'Opção vazia inválida' },
   { value: 'a', label: 'Opção A' },
   { value: 'b', label: 'Opção B' },
 ] as const
 
 function AppControlsHarness() {
   const [date, setDate] = useState('1988-03-14')
+  const [boundedDate, setBoundedDate] = useState('2000-06-15')
   const [selection, setSelection] = useState('')
   const [rerenderVersion, setRerenderVersion] = useState(0)
 
@@ -44,6 +46,20 @@ function AppControlsHarness() {
         </output>
         <output aria-label="Versão de rerender do fixture" data-testid="fixture-rerender-version">
           {rerenderVersion}
+        </output>
+      </section>
+
+      <section aria-label="Fixture do seletor de data com limites" className="sw:flex sw:flex-col sw:gap-3">
+        <AppDatePicker
+          value={boundedDate}
+          onValueChange={setBoundedDate}
+          ariaLabel="Data com limites"
+          minDate="2000-01-01"
+          maxDate="2000-12-31"
+          calendarProps={{ defaultMonth: isoToLocalDate('2000-06-15') }}
+        />
+        <output aria-label="Valor ISO com limites" data-testid="bounded-date-output">
+          {boundedDate}
         </output>
       </section>
 
