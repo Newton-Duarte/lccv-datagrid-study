@@ -43,6 +43,43 @@ async (page) => {
     await waitFor(() => page.getByText('18 registros', { exact: true }).isVisible(), 'A tela inicial não carregou')
   }
 
+  const exerciseSharedControls = async () => {
+    await page.goto('http://127.0.0.1:5187/tests/browser/app-controls.html')
+    const dateInput = page.getByRole('textbox', { name: 'Data controlada' })
+    const dateOutput = page.getByTestId('controlled-date-output')
+    await waitFor(async () => (await dateOutput.textContent()) === '1988-03-14', 'Fixture não iniciou com a data ISO esperada')
+    assert(await dateInput.inputValue() === '14/03/1988', 'Fixture não exibiu a data inicial em pt-BR')
+
+    await button('Limpar data externa').click()
+    await waitFor(async () => (await dateOutput.textContent()) === '', 'Limpeza externa não atualizou o valor ISO')
+    assert(await dateInput.inputValue() === '', 'Limpeza externa não limpou o input visível')
+
+    await page.getByRole('button', { name: 'Abrir calendário' }).click()
+    await page.getByRole('button', { name: 'segunda-feira, 14 de março de 1988' }).click()
+    await waitFor(async () => (await dateOutput.textContent()) === '1988-03-14', 'Seleção do calendário não atualizou o valor ISO')
+    assert(await dateInput.inputValue() === '14/03/1988', 'Seleção do calendário não atualizou o input visível')
+    await waitFor(async () => (await page.locator('[role=dialog]').count()) === 0, 'Seleção do calendário não fechou o popup')
+
+    await button('Limpar data externa').click()
+    await button('Restaurar data externa').click()
+    assert(await dateOutput.textContent() === '1988-03-14', 'Restauro externo não recuperou o valor ISO')
+    await waitFor(async () => (await dateInput.inputValue()) === '14/03/1988', 'Restauro externo não sincronizou o input visível')
+    await dateInput.click()
+    await dateInput.press('Control+A')
+    await dateInput.press('Backspace')
+    await waitFor(async () => (await dateOutput.textContent()) === '', 'Limpeza digitada não atualizou o valor ISO')
+    await waitFor(async () => (await dateInput.inputValue()) === '', 'Limpeza digitada não limpou o input visível')
+
+    const select = page.getByRole('combobox', { name: 'Seleção genérica' })
+    const selectOutput = page.getByTestId('controlled-select-output')
+    await select.click()
+    await page.getByRole('option', { name: 'Opção A' }).click()
+    await waitFor(async () => (await selectOutput.textContent()) === 'a', 'AppSelect não publicou a opção genérica')
+    await button('Limpar seleção externa').click()
+    await waitFor(async () => (await selectOutput.textContent()) === '', 'AppSelect não limpou a seleção controlada')
+    assert(await select.textContent() === 'Escolha uma opção', 'AppSelect não exibiu o placeholder após limpeza')
+  }
+
   const editText = async (id, column, label, value) => {
     await cell(id, column).dblclick()
     const editor = page.locator(`input[aria-label="${label}"]`)
@@ -79,7 +116,9 @@ async (page) => {
 
   const editRoleWithKeyboard = async (id) => {
     await cell(id, 'role').dblclick()
-    const editor = page.locator('select[aria-label="Perfil"]')
+    // AG Grid marks its active body as aria-hidden while a cell editor owns focus.
+    // Use the editor's explicit label without requiring it to be in the a11y tree.
+    const editor = page.locator('button[role="combobox"][aria-label="Perfil"]')
     await editor.press('ArrowUp')
     await editor.press('Enter')
     await waitFor(async () => !(await editor.isVisible()), 'O editor de perfil não foi finalizado')
@@ -101,6 +140,7 @@ async (page) => {
 
   try {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:5187' })
+    await exerciseSharedControls()
     await page.setViewportSize({ width: 1440, height: 1000 })
     await fresh()
     await assertGridFitsCard('desktop inicial')
@@ -324,8 +364,34 @@ async (page) => {
     await fresh()
     await editRoleWithKeyboard('user-003')
     assert((await cellText('user-003', 'role')).includes('Editor'), 'Perfil não respondeu ao teclado')
-    await editTextAndSave('user-003', 'birthDate', 'Data de nascimento', '29/02/2000')
-    assert((await cellText('user-003', 'birthDate')).includes('29/02/2000'), 'Data não respondeu ao teclado')
+    await cell('user-001', 'role').dblclick()
+    const unchangedRoleEditor = page.locator('button[role="combobox"][aria-label="Perfil"]')
+    await page.getByRole('option', { name: 'Administrador' }).click()
+    await waitFor(async () => !(await unchangedRoleEditor.isVisible()), 'Escolher o perfil já selecionado não encerrou a edição')
+    assert((await cellText('user-001', 'role')).includes('Administrador'), 'Escolher o perfil já selecionado alterou o valor')
+
+    await cell('user-001', 'birthDate').click()
+    await page.keyboard.type('1')
+    const firstCharacterDate = page.locator('input[aria-label="Data de nascimento"]')
+    await waitFor(async () => (await firstCharacterDate.inputValue()) === '1', 'A primeira tecla não chegou ao editor de data')
+    await firstCharacterDate.press('Escape')
+
+    await cell('user-003', 'birthDate').dblclick()
+    const sequentialDate = page.locator('input[aria-label="Data de nascimento"]')
+    await sequentialDate.press('Control+A')
+    await page.keyboard.type('29022000')
+    assert(await sequentialDate.inputValue() === '29/02/2000', 'A máscara de data não acompanhou a digitação sequencial')
+    await sequentialDate.press('Enter')
+    await waitFor(async () => !(await sequentialDate.isVisible()), 'A data sequencial não foi finalizada')
+    await waitFor(async () => (await cellText('user-003', 'birthDate')).includes('29/02/2000'), 'Data não respondeu ao teclado')
+
+    await cell('user-003', 'birthDate').dblclick()
+    const calendarDate = page.locator('input[aria-label="Data de nascimento"]')
+    await page.getByRole('button', { name: 'Abrir calendário' }).click()
+    await page.getByRole('button', { name: 'segunda-feira, 14 de fevereiro de 2000' }).click()
+    await waitFor(async () => !(await calendarDate.isVisible()), 'A seleção de calendário não finalizou a data')
+    assert((await cellText('user-003', 'birthDate')).includes('14/02/2000'), 'A seleção de calendário não publicou o dia escolhido')
+
     await fresh()
     await cell('user-003', 'birthDate').dblclick()
     const dateEditor = page.locator('input[aria-label="Data de nascimento"]')
