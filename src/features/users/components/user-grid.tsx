@@ -10,7 +10,7 @@ import {
 import type { DataAcknowledgment, OperationResult, SpreadsheetCellRendererParams } from 'sbwb-ds-v2-aggrid'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
-import { useWatch } from 'react-hook-form'
+import { useFormState, useWatch } from 'react-hook-form'
 import type { UserField, UserRecord } from '../types.ts'
 import type { UserGridControls, UserGridProps } from '../grid/types.ts'
 import { USER_BINDINGS } from '../grid/user-bindings.ts'
@@ -43,6 +43,11 @@ export function UserGrid({
 }: UserGridProps): ReactElement {
   const watchedUsers = useWatch({ control: form.control, name: 'users' })
   const users = useMemo(() => watchedUsers ?? [], [watchedUsers])
+  // Keep a dedicated RHF subscription: nested errors/touched objects may retain
+  // identity while their contents change between validation notifications.
+  const validationState = useFormState({ control: form.control })
+  const validationErrors = validationState.errors
+  const validationTouchedFields = validationState.touchedFields
   const apiRef = useRef<GridApi<UserRecord> | null>(null)
   const pendingRevealRef = useRef<string | null>(null)
   const pendingFocusRef = useRef<PendingFocus | null>(null)
@@ -303,10 +308,9 @@ export function UserGrid({
   const controls = useMemo<UserGridControls>(() => ({ finishEditing, cancelEditing, synchronizeExternalData, revealNewRow, focusFirstError }), [cancelEditing, finishEditing, focusFirstError, revealNewRow, synchronizeExternalData])
   useEffect(() => onReady(controls), [controls, onReady])
 
-  const { errors, touchedFields } = form.formState
   useEffect(() => {
     apiRef.current?.refreshCells({ force: true })
-  }, [errors, touchedFields, showAllErrors, users])
+  }, [validationState, validationErrors, validationTouchedFields, showAllErrors, users])
 
   /* eslint-disable react-hooks/immutability */
   const attachSpreadsheetHost = useCallback((element: HTMLDivElement | null) => {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { createFormControl } from 'react-hook-form'
 import { createMockUsers } from '../src/features/users/data/mock-users.ts'
 import {
   cloneUsers,
@@ -165,4 +166,21 @@ test('shares touched-field visibility between validation summary and grid cells'
   assert.equal(isVisibleUserError({ ...state, isTouched: true }, false), true)
   assert.equal(isVisibleUserError(state, true), true)
   assert.equal(isVisibleUserError({ error: undefined, isTouched: true }, true), false)
+})
+
+test('RHF validation subscribers receive fresh snapshots for touched notifications', () => {
+  const form = createFormControl<UsersFormValues>({ defaultValues: validValues() })
+  const snapshots: Array<{ touchedFields?: unknown }> = []
+  const unsubscribe = form.subscribe({
+    formState: { errors: true, touchedFields: true },
+    callback: (snapshot) => snapshots.push(snapshot),
+  })
+
+  form.setValue('users.0.name', 'Nome tocado', { shouldTouch: true })
+  form.setValue('users.0.role', 'Administrador', { shouldTouch: true })
+  unsubscribe()
+
+  assert.ok(snapshots.length >= 2)
+  assert.notEqual(snapshots.at(-2), snapshots.at(-1))
+  assert.deepEqual((snapshots.at(-1)?.touchedFields as { users?: Array<{ name?: boolean }> }).users?.[0]?.name, true)
 })
