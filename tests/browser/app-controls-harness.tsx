@@ -17,6 +17,9 @@ const OPTIONS = [
 function AppControlsHarness() {
   const [date, setDate] = useState('1988-03-14')
   const [boundedDate, setBoundedDate] = useState('2000-06-15')
+  const [deferredDate, setDeferredDate] = useState('1988-03-14')
+  const [deferredValue, setDeferredValue] = useState('1988-03-14')
+  const [deferredBlurCount, setDeferredBlurCount] = useState(0)
   const [selection, setSelection] = useState('')
   const [rerenderVersion, setRerenderVersion] = useState(0)
 
@@ -46,6 +49,27 @@ function AppControlsHarness() {
         </output>
         <output aria-label="Versão de rerender do fixture" data-testid="fixture-rerender-version">
           {rerenderVersion}
+        </output>
+      </section>
+
+      <section aria-label="Fixture do seletor de data com atualização adiada" className="sw:flex sw:flex-col sw:gap-3">
+        <AppDatePicker
+          value={deferredDate}
+          onValueChange={setDeferredValue}
+          ariaLabel="Data controlada adiada"
+          inputProps={{ onBlur: () => setDeferredBlurCount((count) => count + 1) }}
+        />
+        <div className="sw:flex sw:flex-wrap sw:gap-2">
+          <Button type="button" onClick={() => setDeferredDate(deferredValue)}>Aplicar valor adiado</Button>
+        </div>
+        <output aria-label="Valor ISO controlado adiado" data-testid="deferred-date-output">
+          {deferredDate}
+        </output>
+        <output aria-label="Valor ISO pendente" data-testid="deferred-date-pending">
+          {deferredValue}
+        </output>
+        <output aria-label="Blurs do controle adiado" data-testid="deferred-date-blur-count">
+          {deferredBlurCount}
         </output>
       </section>
 

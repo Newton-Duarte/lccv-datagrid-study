@@ -87,7 +87,6 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
   const inputKey = value === '' ? 'empty' : 'filled'
   const inputNodeRef = useRef<HTMLInputElement | null>(null)
   const restoreInputFocusRef = useRef(false)
-  const restoreInputKeyRef = useRef<string | null>(null)
   const effectiveCalendarProps = {
     ...calendarProps,
     captionLayout: calendarProps?.captionLayout ?? 'dropdown',
@@ -96,15 +95,17 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
   }
 
   const setInputRef = useCallback((node: HTMLInputElement | null): void => {
+    if (node === null && inputNodeRef.current !== null && document.activeElement === inputNodeRef.current) {
+      restoreInputFocusRef.current = true
+    }
     inputNodeRef.current = node
     if (typeof ref === 'function') ref(node)
     else if (ref) ref.current = node
   }, [ref])
 
   useLayoutEffect(() => {
-    if (!restoreInputFocusRef.current || restoreInputKeyRef.current !== inputKey) return
+    if (!restoreInputFocusRef.current) return
     restoreInputFocusRef.current = false
-    restoreInputKeyRef.current = null
     inputNodeRef.current?.focus({ preventScroll: true })
   }, [inputKey])
 
@@ -123,20 +124,12 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
           : 'A data informada está depois do limite permitido.',
       }
       : syntax
-    const nextInputKey = parsed.ok ? (parsed.value === '' ? 'empty' : 'filled') : null
-    if (nextInputKey !== null && nextInputKey !== inputKey && document.activeElement === event.currentTarget) {
-      restoreInputFocusRef.current = true
-      restoreInputKeyRef.current = nextInputKey
-    }
     onDraftChange?.(raw, parsed)
     if (parsed.ok) onValueChange(parsed.value)
     inputProps?.onChange?.(event)
   }
 
   const handleInputBlur = (event: FocusEvent<HTMLInputElement>): void => {
-    if (restoreInputKeyRef.current !== null && restoreInputKeyRef.current !== inputKey) return
-    restoreInputFocusRef.current = false
-    restoreInputKeyRef.current = null
     inputProps?.onBlur?.(event)
   }
 

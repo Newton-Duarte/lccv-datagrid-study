@@ -51,6 +51,34 @@ async (page) => {
     await waitFor(async () => (await dateOutput.textContent()) === '1988-03-14', 'Fixture não iniciou com a data ISO esperada')
     assert(await dateInput.inputValue() === '14/03/1988', 'Fixture não exibiu a data inicial em pt-BR')
 
+    const deferredFixture = page.getByRole('region', { name: 'Fixture do seletor de data com atualização adiada', exact: true })
+    const deferredInput = deferredFixture.getByRole('textbox', { name: 'Data controlada adiada' })
+    const deferredOutput = page.getByTestId('deferred-date-output')
+    const deferredPending = page.getByTestId('deferred-date-pending')
+    const deferredBlurs = page.getByTestId('deferred-date-blur-count')
+    await deferredInput.click()
+    await deferredInput.press('Control+A')
+    await deferredInput.press('Backspace')
+    await waitFor(async () => (await deferredInput.inputValue()) === '', 'Limpeza adiada não limpou o input visível')
+    assert(await deferredOutput.textContent() === '1988-03-14', 'O controle adiado aplicou a limpeza antes do botão Aplicar')
+    assert(await deferredPending.textContent() === '', 'O controle adiado não reteve a limpeza pendente')
+    await deferredInput.press('Tab')
+    await waitFor(async () => (await deferredBlurs.textContent()) === '1', 'Blur público não foi encaminhado após foco sair do controle adiado')
+    const deferredTabFocus = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      label: document.activeElement?.getAttribute('aria-label'),
+    }))
+    assert(deferredTabFocus.tag === 'BUTTON' && deferredTabFocus.label === 'Abrir calendário', 'Tab não moveu o foco para o gatilho do calendário adiado')
+    const deferredApply = deferredFixture.getByRole('button', { name: 'Aplicar valor adiado', exact: true })
+    await deferredApply.click()
+    await waitFor(async () => (await deferredOutput.textContent()) === '', 'Aplicar não publicou o valor vazio adiado')
+    assert(await deferredInput.inputValue() === '', 'Aplicar não sincronizou o input vazio adiado')
+    const deferredApplyFocus = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      text: document.activeElement?.textContent?.trim(),
+    }))
+    assert(deferredApplyFocus.tag === 'BUTTON' && deferredApplyFocus.text === 'Aplicar valor adiado', 'Aplicar perdeu o foco para o input remountado')
+
     await button('Limpar data externa').click()
     await waitFor(async () => (await dateOutput.textContent()) === '', 'Limpeza externa não atualizou o valor ISO')
     assert(await dateInput.inputValue() === '', 'Limpeza externa não limpou o input visível')
