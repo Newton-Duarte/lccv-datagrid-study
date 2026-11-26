@@ -13,16 +13,16 @@ Build a single main screen matching our standard list layout:
 
 2. **Excel-Like DataGrid Columns (No Actions Column):**
    - **Nome (`name`):** Editable text cell (required).
-   - **Perfil / Cargo (`role`):** Editable select dropdown cell (`Administrador`, `Editor`, `Visualizador`).
+   - **Perfil (`role`):** Editable select dropdown cell (`Administrador`, `Editor`, `Visualizador`).
    - **Data de nascimento (`birthDate`):** Editable date cell formatted as `DD/MM/YYYY` (`pt-BR`).
-   - **Salário mensal (R$) (`numericValue`):** Editable gross monthly salary, stored as a number and displayed as BRL with `pt-BR` separators and two decimal places (e.g., `R$ 5.420,50`). Reject negative salaries and malformed input; permit an empty draft while completing a new row, but require a salary when saving.
+   - **Salário mensal (R$) (`salary`):** Editable gross monthly salary, stored as a number and displayed as BRL with `pt-BR` separators and two decimal places (e.g., `R$ 5.420,50`). Reject negative salaries and malformed input; permit an empty draft while completing a new row, but require a salary when saving.
 
 3. **Spreadsheet Behavior:**
    - Connect the library's `useSpreadsheet` hook (cell range selection, keyboard navigation with Arrow/Enter/Tab keys, copy/paste, and direct cell editing).
    - No per-row "Ações" column—keep the table clean and spreadsheet-focused.
 
 ## Data & Persistence
-- Seed the grid with 15–20 realistic Brazilian user records in `src/data/mockUsers.ts`.
+- Seed the grid with 15–20 realistic Brazilian user records in `src/features/users/data/mock-users.ts`.
 - React Hook Form owns all additions and inline cell edits in browser memory.
 - Saving validates required names, valid profiles and dates, and nonnegative salaries, then updates an in-memory saved baseline. Discarding restores that baseline, including undoing unsaved row additions.
 - Refreshing the page reloads the mock data; Save does not write to a backend or browser storage.

@@ -29,10 +29,10 @@ O app importa `DataGrid`, `useSpreadsheet`, `createImmutableDataAdapter`, editor
 ## Propriedade dos dados
 
 - `src/app.tsx` é o único dono do formulário: `useForm<UsersFormValues>` com `shouldUnregister: false`, Zod e `zodResolver`.
-- `src/users/model.ts` define `UserRecord`, IDs de domínio, drafts, clones, datas ISO e formatação BRL.
-- `src/users/schema.ts` valida a planilha completa no Save: nome, perfil, data não futura e salário finito não negativo (zero é válido).
-- `src/users/bindings.ts` conecta IDs de coluna a leitura, parsing e escrita imutável. O adaptador publica operações de Spreadsheet sincronamente pelo ID, nunca pelo índice visual.
-- `src/components/UserGrid.tsx` é o adaptador visual: `useWatch` projeta o formulário, fornece as colunas/editoras e expõe controles para terminar/cancelar edição, sincronizar topologia, revelar a nova linha e focar o primeiro erro.
+- `src/features/users/types.ts`, `constants.ts`, `utils/user-record.ts` e `schema.ts` definem o domínio, IDs estáveis, drafts, clones e validação da planilha completa no Save.
+- `src/utils/date.ts` e `src/utils/currency.ts` concentram conversões de calendário local, parsing `pt-BR` e formatação BRL.
+- `src/features/users/grid/user-bindings.ts` conecta os IDs `name`, `role`, `birthDate` e `salary` a leitura, parsing e escrita imutável. O adaptador publica operações de Spreadsheet sincronamente pelo ID, nunca pelo índice visual.
+- `src/features/users/components/user-grid.tsx` é o adaptador visual: `useWatch` projeta o formulário, fornece as colunas/editoras e expõe controles para terminar/cancelar edição, sincronizar topologia, revelar a nova linha e focar o primeiro erro.
 
 ## Edição e confirmação
 

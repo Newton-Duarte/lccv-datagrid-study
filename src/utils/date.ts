@@ -1,26 +1,6 @@
-export type UserRole = 'Administrador' | 'Editor' | 'Visualizador'
-
-export type UserRecord = {
-  id: string
-  name: string
-  role: UserRole | ''
-  birthDate: string
-  numericValue: number | null
-}
-
-export type UsersFormValues = {
-  users: UserRecord[]
-}
-
 export type DateInputResult =
   | { ok: true; value: string }
   | { ok: false; message: string }
-
-export const USER_ROLES = [
-  'Administrador',
-  'Editor',
-  'Visualizador',
-] as const satisfies readonly UserRole[]
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 const BR_DATE_PATTERN = /^(\d{2})\/(\d{2})\/(\d{4})$/
@@ -44,23 +24,7 @@ export function isValidIsoDate(value: string): boolean {
   return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
 }
 
-export function createUserDraft(): UserRecord {
-  return {
-    id: crypto.randomUUID(),
-    name: '',
-    role: 'Visualizador',
-    birthDate: '',
-    numericValue: null,
-  }
-}
-
-export function cloneUsers(values: UsersFormValues): UsersFormValues {
-  return {
-    users: values.users.map((user) => ({ ...user })),
-  }
-}
-
-export function parseBirthDateInput(input: unknown): DateInputResult {
+export function parseDateInput(input: unknown): DateInputResult {
   if (input === '') return { ok: true, value: '' }
 
   if (typeof input !== 'string') {
@@ -93,14 +57,46 @@ export function parseBirthDateInput(input: unknown): DateInputResult {
   }
 }
 
-export function formatBirthDate(iso: string): string {
+function invalidDateError(value: unknown): RangeError {
+  return new RangeError(`Data inválida: ${String(value)}`)
+}
+
+function createLocalCalendarDate(year: number, month: number, day: number): Date {
+  // setFullYear avoids Date's special treatment of years 0 through 99.
+  const date = new Date(0)
+  date.setFullYear(year, month - 1, day)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+export function formatDateBR(iso: string): string {
   if (!isValidIsoDate(iso)) return ''
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 }
 
-export const salaryFormat = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
+export function isoToLocalDate(iso: string): Date | undefined {
+  if (iso === '') return undefined
+  if (!isValidIsoDate(iso)) throw invalidDateError(iso)
+
+  const match = ISO_DATE_PATTERN.exec(iso)
+  if (match === null) throw invalidDateError(iso)
+  return createLocalCalendarDate(Number(match[1]), Number(match[2]), Number(match[3]))
+}
+
+export function localDateToIso(date: Date | undefined): string {
+  if (date === undefined) return ''
+  if (Number.isNaN(date.getTime())) throw invalidDateError(date)
+
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  if (year < 0 || year > 9999 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
+    throw invalidDateError(date)
+  }
+
+  return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+}
+
+export function getTodayIsoDate(now: Date = new Date()): string {
+  return localDateToIso(now)
+}

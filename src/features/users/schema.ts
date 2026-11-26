@@ -1,18 +1,7 @@
 import { z } from 'zod'
-import {
-  isValidIsoDate,
-  USER_ROLES,
-  type UserRecord,
-  type UsersFormValues,
-} from './model.ts'
-
-function localCalendarDate(): string {
-  const today = new Date()
-  const year = today.getFullYear().toString().padStart(4, '0')
-  const month = (today.getMonth() + 1).toString().padStart(2, '0')
-  const day = today.getDate().toString().padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
+import { USER_ROLES } from './constants.ts'
+import type { UserRecord, UsersFormValues } from './types.ts'
+import { isValidIsoDate, getTodayIsoDate } from '../../utils/date.ts'
 
 const userSchema: z.ZodType<UserRecord, UserRecord> = z.object({
   id: z.string().min(1, 'Identificador do usuário é obrigatório.'),
@@ -27,10 +16,10 @@ const userSchema: z.ZodType<UserRecord, UserRecord> = z.object({
   birthDate: z
     .string()
     .refine(isValidIsoDate, 'Informe uma data de nascimento válida.')
-    .refine((value) => value <= localCalendarDate(), {
+    .refine((value) => value <= getTodayIsoDate(), {
       message: 'A data de nascimento não pode ser futura.',
     }),
-  numericValue: z
+  salary: z
     .number()
     .refine((value) => Number.isFinite(value) && value >= 0, {
       message: 'Informe um salário válido maior ou igual a zero.',
