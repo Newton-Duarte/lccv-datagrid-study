@@ -75,6 +75,19 @@ async (page) => {
     await page.keyboard.type('1')
     assert(await dateInput.inputValue() === '1', 'Rascunho parcial do fixture não foi mantido antes do rerender')
     assert(await dateOutput.textContent() === '1988-03-14', 'Rascunho parcial do fixture alterou o ISO controlado')
+    await button('Limpar data externa').click()
+    await waitFor(async () => (await dateOutput.textContent()) === '', 'Limpeza externa após rascunho parcial não atualizou o ISO')
+    await waitFor(async () => (await dateInput.inputValue()) === '', 'Limpeza externa após rascunho parcial não limpou o input')
+    const externalClearFocus = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      text: document.activeElement?.textContent?.trim(),
+    }))
+    assert(externalClearFocus.tag === 'BUTTON' && externalClearFocus.text === 'Limpar data externa', 'Limpeza externa roubou o foco para o input remountado')
+    await button('Restaurar data externa').click()
+    await waitFor(async () => (await dateInput.inputValue()) === '14/03/1988', 'Restauro após limpeza externa não recuperou o valor')
+    await dateInput.click()
+    await dateInput.press('Control+A')
+    await page.keyboard.type('1')
     await button('Forçar rerender independente').click()
     await waitFor(async () => (await page.getByTestId('fixture-rerender-version').textContent()) === '1', 'Fixture não realizou o rerender independente')
     assert(await dateInput.inputValue() === '1', 'Rerender externo apagou o rascunho parcial do fixture')
