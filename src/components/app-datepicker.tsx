@@ -13,7 +13,7 @@ import type {
   DatePickerInputGroupProps,
   DatePickerInputProps,
 } from '@sbwb-design-system/ui-core'
-import { forwardRef, useMemo } from 'react'
+import { forwardRef, useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ChangeEvent, FocusEvent, KeyboardEvent, ReactElement, RefObject } from 'react'
 import {
   isValidIsoDate,
@@ -85,6 +85,8 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
   const minimumDate = useMemo(() => dateFromIso(minDate), [minDate])
   const maximumDate = useMemo(() => dateFromIso(maxDate), [maxDate])
   const inputKey = value === '' ? 'empty' : 'filled'
+  const inputNodeRef = useRef<HTMLInputElement | null>(null)
+  const restoreInputFocusRef = useRef(false)
   const effectiveCalendarProps = {
     ...calendarProps,
     captionLayout: calendarProps?.captionLayout ?? 'dropdown',
@@ -92,12 +94,25 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
     endMonth: maximumDate ?? calendarProps?.endMonth,
   }
 
+  const setInputRef = useCallback((node: HTMLInputElement | null): void => {
+    inputNodeRef.current = node
+    if (typeof ref === 'function') ref(node)
+    else if (ref) ref.current = node
+  }, [ref])
+
+  useLayoutEffect(() => {
+    if (!restoreInputFocusRef.current) return
+    restoreInputFocusRef.current = false
+    inputNodeRef.current?.focus({ preventScroll: true })
+  }, [inputKey])
+
   const handlePickerChange = (date: Date | undefined): void => {
     onValueChange(localDateToIso(date))
   }
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
     const raw = event.currentTarget.value
+    if (document.activeElement === event.currentTarget) restoreInputFocusRef.current = true
     const syntax = parseDateInput(raw)
     const parsed = syntax.ok && syntax.value !== '' && !isWithinBounds(syntax.value, minDate, maxDate)
       ? {
@@ -146,7 +161,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
       >
         <DatePickerInput
           {...inputProps}
-          ref={ref}
+          ref={setInputRef}
           aria-label={ariaLabel}
           disabled={disabled}
           onChange={handleInputChange}

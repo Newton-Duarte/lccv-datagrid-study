@@ -86,6 +86,14 @@ async (page) => {
     await dateInput.press('Backspace')
     await waitFor(async () => (await dateOutput.textContent()) === '', 'Limpeza digitada não atualizou o valor ISO')
     await waitFor(async () => (await dateInput.inputValue()) === '', 'Limpeza digitada não limpou o input visível')
+    await page.keyboard.type('15021990')
+    await waitFor(async () => (await dateInput.inputValue()) === '15/02/1990', 'A digitação sequencial após limpar perdeu o foco do input')
+    await waitFor(async () => (await dateOutput.textContent()) === '1990-02-15', 'A digitação sequencial após limpar não publicou o ISO')
+    const replacementFocus = await page.evaluate(() => ({
+      label: document.activeElement?.getAttribute('aria-label'),
+      value: document.activeElement?.value,
+    }))
+    assert(replacementFocus.label === 'Data controlada' && replacementFocus.value === '15/02/1990', 'A data aceita após limpar não devolveu o foco ao input')
 
     const boundedInput = page.getByRole('textbox', { name: 'Data com limites' })
     const boundedOutput = page.getByTestId('bounded-date-output')
@@ -153,6 +161,18 @@ async (page) => {
         && editorBox.y >= cellBox.y - 1
         && editorBox.y + editorBox.height <= cellBox.y + cellBox.height + 1
     }, `${label}: editor não coube na célula`)
+  }
+
+  const assertPopupFitsViewport = async (label, popupLocator) => {
+    await waitFor(async () => {
+      const popupBox = await popupLocator.boundingBox()
+      const viewport = page.viewportSize()
+      return popupBox !== null && viewport !== null
+        && popupBox.x >= -1
+        && popupBox.y >= -1
+        && popupBox.x + popupBox.width <= viewport.width + 1
+        && popupBox.y + popupBox.height <= viewport.height + 1
+    }, `${label}: popup excedeu o viewport`)
   }
 
   const editRoleWithKeyboard = async (id) => {
@@ -419,6 +439,7 @@ async (page) => {
     await mouseRoleCell.dblclick()
     const mouseRoleEditor = page.locator('button[role="combobox"][aria-label="Perfil"]')
     await assertEditorFitsCell('perfil', mouseRoleCell, mouseRoleEditor)
+    await assertPopupFitsViewport('popup de perfil', page.locator('.user-role-editor__content'))
     await page.getByRole('option', { name: 'Administrador' }).click()
     await waitFor(async () => (await cellText('user-003', 'role')).includes('Administrador'), 'A seleção de perfil por mouse não publicou na linha estável')
     assert((await cellText('user-004', 'role')).includes('Editor'), 'A seleção de perfil por mouse alterou outra linha')
@@ -459,6 +480,11 @@ async (page) => {
     await page.keyboard.press('Escape')
     await waitFor(async () => !(await popupEscapeInput.isVisible()), 'Escape no popup não cancelou o editor de data')
     assert((await cellText('user-003', 'birthDate')).includes('08/12/1979'), 'Escape no popup publicou uma data não escolhida')
+    const popupEscapeFocus = await page.evaluate(() => ({
+      rowId: document.activeElement?.closest('.ag-row')?.getAttribute('row-id'),
+      columnId: document.activeElement?.closest('.ag-cell')?.getAttribute('col-id'),
+    }))
+    assert(popupEscapeFocus.rowId === 'user-003' && popupEscapeFocus.columnId === 'birthDate', 'Escape no popup não devolveu o foco à célula de data')
 
     await cell('user-003', 'birthDate').dblclick()
     const sequentialDate = page.locator('input[aria-label="Data de nascimento"]')
@@ -516,6 +542,7 @@ async (page) => {
       return {
         year: now.getFullYear(),
         month: now.getMonth(),
+        tomorrowMonth: tomorrow.getMonth(),
         tomorrowLabel: format.format(tomorrow),
       }
     })
@@ -523,7 +550,11 @@ async (page) => {
     await maxCalendar.getByRole('combobox', { name: 'Selecionar mês' }).selectOption(String(maxNavigation.month))
     const nextMonth = maxCalendar.getByRole('button', { name: 'Próximo mês' })
     const tomorrowButton = maxCalendar.locator(`button[aria-label="${maxNavigation.tomorrowLabel}"]`)
-    assert(await tomorrowButton.isDisabled(), 'A data posterior a hoje não foi desabilitada pelo maxDate da feature')
+    if (maxNavigation.tomorrowMonth === maxNavigation.month) {
+      assert(await tomorrowButton.isDisabled(), 'A data posterior a hoje não foi desabilitada pelo maxDate da feature')
+    } else {
+      assert(await tomorrowButton.count() === 0, 'O calendário exibiu um botão de amanhã fora do mês corrente')
+    }
     assert(await maxDateInput.inputValue() === '14/03/1988', 'Navegar até o mês limite alterou a data armazenada')
     assert(await nextMonth.isDisabled(), 'A navegação para um mês além do maxDate não foi bloqueada')
     await maxDateInput.press('Escape')
@@ -537,8 +568,7 @@ async (page) => {
     assert(await calendarDate.inputValue() === '29/02/2000', 'A preparação do calendário não manteve a data de referência')
     await assertEditorFitsCell('data', cell('user-003', 'birthDate'), page.locator('.app-datepicker__group'))
     await page.getByRole('button', { name: 'Abrir calendário' }).click()
-    const desktopPopupBox = await page.locator('.user-date-editor__content').boundingBox()
-    assert(desktopPopupBox !== null && desktopPopupBox.x >= 0 && desktopPopupBox.x + desktopPopupBox.width <= 1440, 'Popup de data desktop excedeu o viewport')
+    await assertPopupFitsViewport('popup de data desktop', page.locator('.user-date-editor__content'))
     await page.getByRole('button', { name: 'segunda-feira, 14 de fevereiro de 2000' }).click()
     await waitFor(async () => !(await calendarDate.isVisible()), 'A seleção de calendário não finalizou a data')
     assert((await cellText('user-003', 'birthDate')).includes('14/02/2000'), 'A seleção de calendário não publicou o dia escolhido')
@@ -573,6 +603,7 @@ async (page) => {
     const narrowPopupBox = await page.locator('.user-date-editor__content').boundingBox()
     const narrowCardBox = await page.locator('.user-card').boundingBox()
     assert(narrowPopupBox !== null && narrowCardBox !== null, 'Popup estreito não permitiu medir viewport e card')
+    await assertPopupFitsViewport('popup de data estreito', page.locator('.user-date-editor__content'))
     assert(narrowPopupBox.x >= 0 && narrowPopupBox.x + narrowPopupBox.width <= 391, 'Popup estreito excedeu o viewport de 390px')
     assert(narrowPopupBox.x + narrowPopupBox.width > narrowCardBox.x + narrowCardBox.width, 'Popup estreito não escapou do clipping do card')
     await page.screenshot({ path: '/tmp/users-date-popup-mobile-settled.png' })
