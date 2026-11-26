@@ -1,6 +1,6 @@
 # Usuários refinements — design
 
-Status: proposed for approval. This document builds on the existing screen and supersedes the earlier layout and source-organization choices for this refinement round.
+Status: approved by the user on 2026-11-26. This document builds on the existing screen and supersedes the earlier layout and source-organization choices for this refinement round.
 
 ## Intent and scope
 
