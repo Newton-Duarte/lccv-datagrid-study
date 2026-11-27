@@ -53,6 +53,8 @@
 }
 
 .users-error-summary {
+  box-sizing: border-box;
+  width: calc(100% - 3.25rem);
   margin: 0 1.625rem 1rem;
 }
 
@@ -154,6 +156,7 @@
   }
 
   .users-error-summary {
+    width: calc(100% - 2rem);
     margin-inline: 1rem;
   }
 

@@ -12,11 +12,11 @@ export type UsersFooterProps = {
   onDiscard(): void
 }
 
-const feedbackColor = (kind: UserFeedback['kind'] | undefined): 'primary' | 'success' | 'warning' | 'error' => {
-  if (kind === 'success') return 'success'
-  if (kind === 'warning') return 'warning'
-  if (kind === 'error') return 'error'
-  return 'primary'
+const feedbackClass = (kind: UserFeedback['kind'] | undefined): string => {
+  if (kind === 'success') return 'sw:text-green-700'
+  if (kind === 'warning') return 'sw:text-amber-700'
+  if (kind === 'error') return 'sw:text-red-600'
+  return 'sw:text-brand-default'
 }
 
 export function UsersFooter({
@@ -38,22 +38,22 @@ export function UsersFooter({
           <span><kbd>Ctrl+Z</kbd> Desfazer</span>
         </div>
         <div className="users-session-copy">
-          {feedback ? <Text variant="body-sm" colorScheme={feedbackColor(feedback.kind)} role="status" aria-live="polite" aria-atomic="true">{feedback.message}</Text> : null}
+          {feedback ? <Text variant="body-sm" colorScheme="default" className={feedbackClass(feedback.kind)} role="status" aria-live="polite" aria-atomic="true">{feedback.message}</Text> : null}
           <Text variant="body-sm" colorScheme="muted">Salvar confirma os dados apenas nesta sessão. Recarregar restaura os dados de exemplo.</Text>
         </div>
       </div>
       <div className="users-footer-actions">
-        {isDirty ? (
-          <span className="users-pending-indicator">
-            <BadgeDot colorScheme="warning" size="sm" aria-hidden="true" />
-            <span className="sw:sr-only">Há alterações não salvas.</span>
-          </span>
-        ) : null}
         <Button type="button" variant="outline" colorScheme="gray" disabled={disabled} onClick={onDiscard}>
           <Undo size={17} aria-hidden="true" />
           Descartar
         </Button>
         <Button type="button" disabled={disabled} onClick={() => void onSave()}>
+          {isDirty ? (
+            <span className="users-pending-indicator">
+              <BadgeDot colorScheme="warning" size="sm" aria-hidden="true" />
+              <span className="sw:sr-only">Há alterações não salvas.</span>
+            </span>
+          ) : null}
           <Save size={17} aria-hidden="true" />
           Salvar alterações
         </Button>

@@ -1,7 +1,6 @@
 import type { ColDef } from 'ag-grid-community'
 import {
   SpreadsheetNumberEditor,
-  SpreadsheetTextEditor,
 } from 'sbwb-ds-v2-aggrid'
 import type { SpreadsheetCellRendererParams } from 'sbwb-ds-v2-aggrid'
 import { BRL_FORMAT } from '../../../utils/currency.ts'
@@ -9,6 +8,7 @@ import { formatDateBR } from '../../../utils/date.ts'
 import { DateEditor } from '../components/editors/date-editor.tsx'
 import { RoleEditor } from '../components/editors/role-editor.tsx'
 import { UserCellContent } from '../components/user-cell-content.tsx'
+import { FirstKeyTextEditor } from '../components/editors/first-key-text-editor.tsx'
 import type { UserField, UserRecord } from '../types.ts'
 import { userErrorId } from '../utils/validation.ts'
 
@@ -41,7 +41,7 @@ export function createUserColumns(
       editable: true,
       flex: 1,
       minWidth: 260,
-      cellEditor: SpreadsheetTextEditor<UserRecord>,
+      cellEditor: FirstKeyTextEditor<UserRecord>,
       cellEditorParams: { inputAriaLabel: 'Nome do usuário' },
       cellRendererParams: { renderContent: renderCell('name') },
       cellClassRules: invalidRules('name'),

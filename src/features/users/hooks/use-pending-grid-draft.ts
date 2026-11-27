@@ -17,6 +17,14 @@ type ActiveEdit = {
   initialValue: unknown
 }
 
+function readActiveEditorValue(rowId: string | undefined, field: string): string | undefined {
+  if (rowId === undefined || !isEditableField(field)) return undefined
+  const cell = document.querySelector<HTMLElement>(`.ag-row[row-id="${rowId}"] [col-id="${field}"]`)
+  const editor = cell?.querySelector<HTMLElement>('input, textarea, [contenteditable="true"], [role="combobox"]')
+  if (editor instanceof HTMLInputElement || editor instanceof HTMLTextAreaElement) return editor.value
+  return editor?.textContent?.trim()
+}
+
 const isEditableField = (value: string): value is UserField =>
   USER_BINDINGS.some((binding) => binding.columnId === value)
 
@@ -46,6 +54,30 @@ export function usePendingGridDraft(
     if (mountedRef.current) onChanged(changed)
   }, [onChanged])
 
+  const getChanged = useCallback((activeEdit: ActiveEdit, value: string): boolean | undefined => {
+    const row = form.getValues('users').find((candidate) => candidate.id === activeEdit.rowId)
+    const binding = USER_BINDINGS.find((candidate) => candidate.columnId === activeEdit.field)
+    if (row === undefined || binding === undefined) return undefined
+    const parsed = binding.parse?.({
+      input: value,
+      row,
+      address: { rowId: activeEdit.rowId, columnId: activeEdit.field },
+      source: 'edit',
+    })
+    if (parsed?.ok) {
+      return !Object.is(binding.read(row), parsed.value)
+        || (activeEdit.initialValue !== undefined && !Object.is(activeEdit.initialValue, parsed.value))
+    }
+    return value.length > 0
+  }, [form])
+
+  const publishValue = useCallback((activeEdit: ActiveEdit, value: string): void => {
+    const changed = getChanged(activeEdit, value)
+    if (changed === undefined) return
+    lastInputRef.current = { rowId: activeEdit.rowId, field: activeEdit.field, changed }
+    publishChanged(changed)
+  }, [getChanged, publishChanged])
+
   const onCellEditingStarted = useCallback((event: CellEditingStartedEvent<UserRecord>) => {
     const rowId = event.data?.id
     const field = event.column.getColId()
@@ -57,12 +89,11 @@ export function usePendingGridDraft(
     const preservesInput = inputBeforeStart !== null
       && inputBeforeStart.rowId === rowId
       && inputBeforeStart.field === field
-    publishChanged(
-      preservesInput
-        ? inputBeforeStart.changed
-        : false,
-    )
-  }, [publishChanged])
+    const activeEdit = activeEditRef.current
+    const activeValue = readActiveEditorValue(rowId, field)
+    if (activeEdit !== null && activeValue !== undefined) publishValue(activeEdit, activeValue)
+    else publishChanged(preservesInput ? inputBeforeStart.changed : false)
+  }, [publishChanged, publishValue])
 
   const onCellEditingStopped = useCallback(() => {
     generationRef.current += 1
@@ -91,33 +122,10 @@ export function usePendingGridDraft(
       ? target.value
       : target.textContent ?? ''
 
-    const report = (value: string): void => {
-      const row = form.getValues('users').find((candidate) => candidate.id === activeEdit.rowId)
-      const binding = USER_BINDINGS.find((candidate) => candidate.columnId === activeEdit.field)
-      if (row === undefined || binding === undefined) return
-      const parsed = binding.parse?.({
-        input: value,
-        row,
-        address: { rowId: activeEdit.rowId, columnId: activeEdit.field },
-        source: 'edit',
-      })
-      if (parsed?.ok) {
-        const changed =
-          !Object.is(binding.read(row), parsed.value)
-          || (activeEdit.initialValue !== undefined && !Object.is(activeEdit.initialValue, parsed.value))
-        lastInputRef.current = { rowId: activeEdit.rowId, field: activeEdit.field, changed }
-        publishChanged(changed)
-        return
-      }
-      const changed = value.length > 0
-      lastInputRef.current = { rowId: activeEdit.rowId, field: activeEdit.field, changed }
-      publishChanged(changed)
-    }
-
     // Publish an eager conservative state so a Save/Discard click immediately
     // following native input sees the draft; the queued read below lets DS
     // masks finish normalizing before deciding whether it actually changed.
-    report(raw)
+    publishValue(activeEdit, raw)
 
     queueMicrotask(() => {
       if (
@@ -127,9 +135,9 @@ export function usePendingGridDraft(
       const normalizedRaw = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
         ? target.value
         : target.textContent ?? ''
-      report(normalizedRaw)
+      publishValue(activeEdit, normalizedRaw)
     })
-  }, [form, publishChanged])
+  }, [publishValue])
 
   return { onCellEditingStarted, onCellEditingStopped, onInputCapture }
 }

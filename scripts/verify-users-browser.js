@@ -37,7 +37,7 @@ async (page) => {
   const cell = (id, column) => row(id).locator(`[col-id="${column}"]`)
   const normalized = (value) => value.replace(/\s+/g, ' ').trim()
   const cellText = async (id, column) => normalized((await cell(id, column).textContent()) ?? '')
-  const save = () => button('Salvar alterações')
+  const save = () => page.locator('.users-footer-actions button').filter({ hasText: 'Salvar alterações' })
   const discard = () => button('Descartar')
   const clickSave = async (label) => {
     assert(!(await save().isDisabled()), `${label}: Salvar está desabilitado antes do clique`)
@@ -373,6 +373,24 @@ async (page) => {
     assert(await page.locator('.users-pending-indicator').count() === 0, 'F2 e Escape não deveriam criar indicador pendente')
 
     await fresh()
+    await cell('user-001', 'name').click()
+    await page.keyboard.type('X')
+    const firstNameEditor = page.getByRole('textbox', { name: 'Nome do usuário', exact: true })
+    await waitFor(async () => (await firstNameEditor.inputValue()) === 'X', 'A primeira tecla imprimível do Nome não inicializou o editor nativo')
+    assert(!(await save().isDisabled()), 'A primeira tecla imprimível do Nome deveria habilitar Salvar')
+    await firstNameEditor.press('Escape')
+    await waitFor(async () => !(await firstNameEditor.isVisible()), 'Escape não cancelou a edição iniciada pela primeira tecla do Nome')
+
+    await fresh()
+    await cell('user-001', 'salary').click()
+    await page.keyboard.type('7')
+    const firstSalaryEditor = page.getByRole('textbox', { name: 'Salário mensal em reais', exact: true })
+    await waitFor(async () => (await firstSalaryEditor.inputValue()) === '7', 'A primeira tecla imprimível do Salário não inicializou o editor nativo')
+    assert(!(await save().isDisabled()), 'A primeira tecla imprimível do Salário deveria habilitar Salvar')
+    await firstSalaryEditor.press('Escape')
+    await waitFor(async () => !(await firstSalaryEditor.isVisible()), 'Escape não cancelou a edição iniciada pela primeira tecla do Salário')
+
+    await fresh()
     await cell('user-001', 'name').dblclick()
     assert(await save().isDisabled(), 'Abrir sem alterar deve manter Salvar desabilitado')
     const nameEditor = page.getByRole('textbox', { name: 'Nome do usuário', exact: true })
@@ -390,6 +408,16 @@ async (page) => {
     assert((await cellText('user-001', 'name')).includes('Nome confirmado'), 'Discard não restaurou o baseline criado por Save')
     await editText('user-001', 'name', 'Nome do usuário', 'Nome temporário')
     assert(await page.locator('.users-pending-indicator').count() === 1, 'Uma edição confirmada deveria exibir o indicador pendente')
+    const pendingDot = page.locator('.users-pending-indicator')
+    const pendingDotGeometry = await pendingDot.evaluate((element) => {
+      const parent = element.parentElement
+      const dot = element.getBoundingClientRect()
+      const button = parent?.getBoundingClientRect()
+      return { parentTag: parent?.tagName, dot, button, text: parent?.textContent ?? '' }
+    })
+    assert(pendingDotGeometry.parentTag === 'BUTTON', 'O indicador pendente deveria pertencer ao botão Salvar')
+    assert(pendingDotGeometry.button !== undefined && pendingDotGeometry.dot.left >= pendingDotGeometry.button.left && pendingDotGeometry.dot.right <= pendingDotGeometry.button.right, 'O indicador pendente deveria ficar dentro do botão Salvar')
+    assert(pendingDotGeometry.text.includes('Há alterações não salvas.') && (await save().textContent())?.includes('Salvar alterações') === true, 'O indicador pendente deveria permanecer acessível junto ao rótulo Salvar')
     await clickDiscard('edição temporária')
     await waitFor(() => page.getByText('Alterações descartadas', { exact: true }).isVisible(), 'Discard não anunciou restauração')
     assert((await cellText('user-001', 'name')).includes('Nome confirmado'), 'Discard não restaurou o último baseline salvo')
@@ -762,6 +790,26 @@ async (page) => {
     await dateEditor.press('Escape')
 
     await fresh()
+    const rejectedDateCell = cell('user-003', 'birthDate')
+    const rejectedDateBefore = await cellText('user-003', 'birthDate')
+    await rejectedDateCell.dblclick()
+    const rejectedDateEditor = page.locator('input[aria-label="Data de nascimento"]')
+    await rejectedDateEditor.fill('31/02/1990')
+    assert(!(await save().isDisabled()), 'Uma data inválida em edição deveria habilitar Salvar para permitir feedback')
+    await clickSave('data inválida em edição')
+    await waitFor(() => page.getByText('A edição não foi aplicada. Verifique o valor informado.', { exact: true }).isVisible(), 'Save de data inválida deveria anunciar a rejeição da edição')
+    assert(!(await page.getByRole('status').allTextContents()).some((text) => text.includes('Alterações salvas nesta sessão')), 'Save de data inválida não poderia anunciar sucesso')
+    assert((await cellText('user-003', 'birthDate')).includes(rejectedDateBefore), 'A data inválida não poderia substituir o valor aceito')
+    assert(await save().isDisabled(), 'A rejeição da data deveria deixar a planilha sem trabalho pendente')
+    await rejectedDateCell.dblclick()
+    const correctedDateEditor = page.locator('input[aria-label="Data de nascimento"]')
+    await correctedDateEditor.fill('15/02/1990')
+    await correctedDateEditor.press('Enter')
+    await waitFor(async () => (await cellText('user-003', 'birthDate')).includes('15/02/1990'), 'A correção válida não foi publicada após a rejeição')
+    await clickSave('correção de data válida')
+    await waitFor(() => page.getByText('Alterações salvas nesta sessão', { exact: true }).isVisible(), 'A correção válida não poderia ser bloqueada pela rejeição anterior')
+
+    await fresh()
     await page.setViewportSize({ width: 390, height: 844 })
     await page.waitForTimeout(200)
     await assertGridFitsCard('narrow')
@@ -808,6 +856,26 @@ async (page) => {
     await waitFor(() => page.getByText('19 registros', { exact: true }).isVisible(), 'O cenário de erro estreito não adicionou a linha')
     await clickSave('estado de erro estreito')
     await waitFor(() => page.locator('[aria-label="Resumo dos erros"]').isVisible(), 'O cenário de erro estreito não revelou o Alert')
+    const narrowErrorMetrics = await page.evaluate(() => {
+      const alert = document.querySelector('[aria-label="Resumo dos erros"]')?.getBoundingClientRect()
+      const card = document.querySelector('.user-card')?.getBoundingClientRect()
+      const feedback = document.querySelector('.users-session-copy [role="status"]')
+      const probe = document.createElement('span')
+      probe.style.color = 'var(--color-red-600)'
+      document.body.append(probe)
+      const metrics = {
+        alert,
+        card,
+        feedbackColor: feedback === null ? '' : getComputedStyle(feedback).color,
+        errorTokenColor: getComputedStyle(probe).color,
+        errorToken: getComputedStyle(document.documentElement).getPropertyValue('--color-red-600').trim(),
+      }
+      probe.remove()
+      return metrics
+    })
+    assert(narrowErrorMetrics.alert !== undefined && narrowErrorMetrics.card !== undefined, 'O cenário de erro estreito não permitiu medir Alert e card')
+    assert(narrowErrorMetrics.alert.left >= narrowErrorMetrics.card.left - 1 && narrowErrorMetrics.alert.right <= narrowErrorMetrics.card.right + 1, 'O Alert estreito excedeu os limites horizontais do card')
+    assert(narrowErrorMetrics.errorToken.length > 0 && narrowErrorMetrics.feedbackColor === narrowErrorMetrics.errorTokenColor, 'O feedback de erro não usou a cor semântica real do DS')
     await page.screenshot({ path: '/tmp/cadastro-usuarios-error.png', fullPage: true })
     await clickDiscard('estado de erro estreito')
     await waitFor(() => page.getByText('18 registros', { exact: true }).isVisible(), 'O cenário de erro estreito não restaurou as linhas')

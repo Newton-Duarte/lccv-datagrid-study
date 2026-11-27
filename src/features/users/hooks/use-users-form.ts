@@ -53,6 +53,7 @@ export function useUsersForm(): UsersFormController {
   const isDirty = formState.isDirty
   const errors = getVisibleUserErrors(form, showAllErrors)
   const hasPendingWork = isDirty || pendingDraft
+  const rejectedEditMessage = 'A edição não foi aplicada. Verifique o valor informado.'
 
   const onReady = useCallback((controls: UserGridControls | null) => {
     controlsRef.current = controls
@@ -72,7 +73,14 @@ export function useUsersForm(): UsersFormController {
     transitionRef.current = true
     setBusy(true)
     try {
-      await controlsRef.current?.finishEditing()
+      const hadPendingDraft = pendingDraftRef.current
+      const accepted = await controlsRef.current?.finishEditing() ?? true
+      if (hadPendingDraft && !accepted) {
+        setPendingDraft(false)
+        pendingDraftRef.current = false
+        onFeedback({ kind: 'error', message: rejectedEditMessage })
+        return
+      }
       const draft = createUserDraft()
       form.setValue('users', [...form.getValues('users'), draft], {
         shouldDirty: true,
@@ -101,7 +109,14 @@ export function useUsersForm(): UsersFormController {
     transitionRef.current = true
     setBusy(true)
     try {
-      await controlsRef.current?.finishEditing()
+      const hadPendingDraft = pendingDraftRef.current
+      const accepted = await controlsRef.current?.finishEditing() ?? true
+      if (hadPendingDraft && !accepted) {
+        setPendingDraft(false)
+        pendingDraftRef.current = false
+        onFeedback({ kind: 'error', message: rejectedEditMessage })
+        return
+      }
       const snapshot = cloneUsers(form.getValues())
       const valid = (await form.trigger()) && usersFormSchema.safeParse(snapshot).success
       if (!valid) {

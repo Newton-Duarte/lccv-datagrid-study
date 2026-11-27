@@ -1,5 +1,5 @@
 import { AG_GRID_LOCALE_BR } from '@ag-grid-community/locale'
-import type { ColDef, GridApi, GridReadyEvent } from 'ag-grid-community'
+import type { CellEditingStoppedEvent, ColDef, GridApi, GridReadyEvent } from 'ag-grid-community'
 import {
   createImmutableDataAdapter,
   useSpreadsheet,
@@ -124,15 +124,15 @@ export function useUserSpreadsheet(options: UserGridProps): UserGridBinding {
     queueMicrotask(tryRevealOrFocus)
   }, [tryRevealOrFocus, users])
 
-  const finishEditing = useCallback(() => new Promise<void>((resolve) => {
+  const finishEditing = useCallback(() => new Promise<boolean>((resolve) => {
     const api = apiRef.current
     if (api === null || api.getEditingCells().length === 0) {
-      resolve()
+      resolve(true)
       return
     }
-    const stopped = () => {
+    const stopped = (event: CellEditingStoppedEvent<UserRecord>) => {
       api.removeEventListener('cellEditingStopped', stopped)
-      resolve()
+      resolve(event.valueChanged)
     }
     api.addEventListener('cellEditingStopped', stopped)
     api.stopEditing(false)
