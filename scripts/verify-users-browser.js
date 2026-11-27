@@ -391,6 +391,20 @@ async (page) => {
     await waitFor(async () => !(await firstSalaryEditor.isVisible()), 'Escape não cancelou a edição iniciada pela primeira tecla do Salário')
 
     await fresh()
+    const transitionSourceCell = cell('user-001', 'name')
+    const transitionDestinationCell = cell('user-002', 'name')
+    const transitionSourceValue = await cellText('user-001', 'name')
+    await transitionSourceCell.dblclick()
+    await transitionDestinationCell.dblclick()
+    const transitionEditor = page.getByRole('textbox', { name: 'Nome do usuário', exact: true })
+    await transitionEditor.fill(transitionSourceValue)
+    await waitFor(async () => !(await save().isDisabled()), 'A entrada nativa após trocar rapidamente de célula não habilitou Salvar para a célula de destino')
+    assert(await transitionEditor.isVisible(), 'A troca rápida de célula perdeu o editor de destino')
+    await transitionEditor.press('Escape')
+    await waitFor(async () => !(await transitionEditor.isVisible()), 'Escape não cancelou o editor após a troca rápida de célula')
+    assert((await cellText('user-002', 'name')).includes('João Pedro dos Santos'), 'A entrada após a troca rápida alterou a linha errada')
+
+    await fresh()
     await cell('user-001', 'name').dblclick()
     assert(await save().isDisabled(), 'Abrir sem alterar deve manter Salvar desabilitado')
     const nameEditor = page.getByRole('textbox', { name: 'Nome do usuário', exact: true })
@@ -854,6 +868,16 @@ async (page) => {
     await page.screenshot({ path: '/tmp/cadastro-usuarios-narrow.png', fullPage: true })
     await button('Novo usuário').click()
     await waitFor(() => page.getByText('19 registros', { exact: true }).isVisible(), 'O cenário de erro estreito não adicionou a linha')
+    const narrowPendingDot = page.locator('.users-pending-indicator')
+    await waitFor(async () => await narrowPendingDot.isVisible(), 'A edição pendente estreita não exibiu o indicador')
+    const narrowPendingDotGeometry = await narrowPendingDot.evaluate((element) => {
+      const parent = element.parentElement
+      const dot = element.getBoundingClientRect()
+      const button = parent?.getBoundingClientRect()
+      return { parentTag: parent?.tagName, dot, button, text: parent?.textContent ?? '' }
+    })
+    assert(narrowPendingDotGeometry.parentTag === 'BUTTON', 'No viewport estreito, o indicador deveria pertencer ao botão Salvar')
+    assert(narrowPendingDotGeometry.button !== undefined && narrowPendingDotGeometry.dot.left >= narrowPendingDotGeometry.button.left && narrowPendingDotGeometry.dot.right <= narrowPendingDotGeometry.button.right && narrowPendingDotGeometry.dot.top >= narrowPendingDotGeometry.button.top && narrowPendingDotGeometry.dot.bottom <= narrowPendingDotGeometry.button.bottom, 'No viewport estreito, o indicador deveria ficar dentro dos limites do botão Salvar')
     await clickSave('estado de erro estreito')
     await waitFor(() => page.locator('[aria-label="Resumo dos erros"]').isVisible(), 'O cenário de erro estreito não revelou o Alert')
     const narrowErrorMetrics = await page.evaluate(() => {

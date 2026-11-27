@@ -17,6 +17,11 @@ type ActiveEdit = {
   initialValue: unknown
 }
 
+type EditingCellTarget = {
+  rowId: string
+  field: UserField
+}
+
 function readActiveEditorValue(rowId: string | undefined, field: string): string | undefined {
   if (rowId === undefined || !isEditableField(field)) return undefined
   const cell = document.querySelector<HTMLElement>(`.ag-row[row-id="${rowId}"] [col-id="${field}"]`)
@@ -27,6 +32,19 @@ function readActiveEditorValue(rowId: string | undefined, field: string): string
 
 const isEditableField = (value: string): value is UserField =>
   USER_BINDINGS.some((binding) => binding.columnId === value)
+
+function getEditingCellTarget(target: HTMLElement): EditingCellTarget | null {
+  const cell = target.closest<HTMLElement>('[role="gridcell"], .ag-cell')
+  if (cell === null || !cell.classList.contains('ag-cell-inline-editing')) return null
+  const rowId = cell.closest<HTMLElement>('.ag-row')?.getAttribute('row-id')
+  const field = cell.getAttribute('col-id')
+  if (rowId === null || rowId === undefined || field === null || !isEditableField(field)) return null
+  return { rowId, field }
+}
+
+function isSameEdit(left: Pick<ActiveEdit, 'rowId' | 'field'>, right: EditingCellTarget): boolean {
+  return left.rowId === right.rowId && left.field === right.field
+}
 
 function isIgnoredInput(target: HTMLElement): boolean {
   return target.closest(
@@ -105,17 +123,13 @@ export function usePendingGridDraft(
   const onInputCapture = useCallback<FormEventHandler<HTMLDivElement>>((event) => {
     const target = event.target
     if (!(target instanceof HTMLElement) || isIgnoredInput(target)) return
-    const cell = target.closest<HTMLElement>('[role="gridcell"], .ag-cell')
-    if (cell === null || !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable)) return
-
-    if (!cell.classList.contains('ag-cell-inline-editing')) return
-    const activeEdit = activeEditRef.current ?? (() => {
-      const rowId = cell.closest<HTMLElement>('.ag-row')?.getAttribute('row-id')
-      const field = cell.getAttribute('col-id')
-      return rowId !== null && rowId !== undefined && field !== null && isEditableField(field)
-        ? { rowId, field, initialValue: undefined }
-        : null
-    })()
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable)) return
+    const targetCell = getEditingCellTarget(target)
+    if (targetCell === null) return
+    const currentEdit = activeEditRef.current
+    const activeEdit = currentEdit !== null && isSameEdit(currentEdit, targetCell)
+      ? currentEdit
+      : { rowId: targetCell.rowId, field: targetCell.field, initialValue: undefined }
     if (activeEdit === null) return
     const generation = generationRef.current
     const raw = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
@@ -128,9 +142,12 @@ export function usePendingGridDraft(
     publishValue(activeEdit, raw)
 
     queueMicrotask(() => {
+      const liveTarget = getEditingCellTarget(target)
       if (
         generation !== generationRef.current
-        || (activeEditRef.current !== null && activeEditRef.current !== activeEdit)
+        || liveTarget === null
+        || !isSameEdit(activeEdit, liveTarget)
+        || (activeEditRef.current !== null && !isSameEdit(activeEditRef.current, liveTarget))
       ) return
       const normalizedRaw = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
         ? target.value
