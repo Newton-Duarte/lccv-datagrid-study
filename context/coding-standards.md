@@ -9,6 +9,7 @@
 - **Spreadsheet & Form Integration:** Follow the exact patterns in `spreadsheet-mode.md` and `react-hook-form.md`. Use one React Hook Form owner with Zod validation and `zodResolver` from `@hookform/resolvers/zod`. Publish accepted changes synchronously by stable row ID, validate outside the Spreadsheet commit, finish active editing before Save, and synchronize the adapter after Discard or structural row changes. Save updates an in-memory baseline; Discard restores it.
 - **File Organization:**
   - `src/features/users/data/mock-users.ts` — Typed seed data (`UserRecord`) with realistic `pt-BR` names, roles, ISO dates (`YYYY-MM-DD`), and salaries.
-  - `src/features/users/components/user-grid.tsx` — Excel-like DataGrid configuration, `pt-BR` column definitions, and cell editors.
+- `src/features/users/hooks/use-user-spreadsheet.ts` and `use-pending-grid-draft.ts` — Excel-like DataGrid lifecycle, `pt-BR` columns, public controls, and active draft detection.
+- `src/features/users/components/user-grid.tsx` — thin host that renders the public `DataGrid`; `users-header.tsx`, `users-footer.tsx`, and `users-error-summary.tsx` own the DS shell.
   - `src/features/users/components/users-page.tsx` — Page shell (`Usuários (X registros)` + `Novo usuário` button) + `UserGrid`.
 - **Styling:** Use our configured Design System (`@sbwb-design-system/ui-core` & `sbwb-icons`) and components for layout, spacing, icons, and buttons. Do not write custom CSS overrides for AG Grid classes. Our design system tailwind uses `sw:` prefix.

@@ -2,6 +2,8 @@
 
 Status: approved by the user on 2026-11-25. Layout A and the form stack were selected in conversation.
 
+> Historical baseline. The active refinement specification is [`2026-11-26-users-refinements-design.md`](2026-11-26-users-refinements-design.md), which supersedes the earlier layout and source-organization choices while preserving the spreadsheet behavior.
+
 ## Intent
 
 Create a clean, copy-pasteable React reference screen for editing fictional Brazilian users as a spreadsheet. Demonstrate the public `sbwb-ds-v2-aggrid` integration with the existing Design System, React Hook Form, Zod, and `zodResolver`, including batch confirmation and validation.

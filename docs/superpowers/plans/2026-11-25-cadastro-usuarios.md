@@ -1,5 +1,7 @@
 # Cadastro de Usuários Implementation Plan
 
+> Historical implementation plan. The current screen is governed by [`2026-11-26-users-refinements-design.md`](../specs/2026-11-26-users-refinements-design.md) and [`2026-11-26-users-refinements.md`](../plans/2026-11-26-users-refinements.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans for native execution, or superpowers:subagent-driven-development if the user chooses delegation, to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. The user explicitly forbids TDD and worktrees; these preferences override skill defaults.
 
 **Goal:** Replace the starter screen with the approved Brazilian user spreadsheet, including monthly salary and whole-sheet Save/Discard.
