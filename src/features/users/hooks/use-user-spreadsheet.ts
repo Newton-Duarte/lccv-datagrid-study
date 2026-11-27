@@ -24,6 +24,19 @@ export type UserGridBinding = {
 
 const EDITABLE_COLUMNS = ['name', 'role', 'birthDate', 'salary'] as const satisfies readonly UserField[]
 
+function updateOwnedDescription(element: HTMLElement, ownedId: string, includeOwned: boolean): void {
+  const currentIds = (element.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+  const nextIds = new Set(currentIds)
+  if (includeOwned) nextIds.add(ownedId)
+  else nextIds.delete(ownedId)
+  const nextValue = [...nextIds].join(' ')
+  if (nextValue === '') {
+    if (element.hasAttribute('aria-describedby')) element.removeAttribute('aria-describedby')
+  } else if (element.getAttribute('aria-describedby') !== nextValue) {
+    element.setAttribute('aria-describedby', nextValue)
+  }
+}
+
 function isNonEmptyRecord(value: object): boolean {
   return Object.keys(value).length > 0
 }
@@ -39,6 +52,7 @@ export function useUserSpreadsheet(options: UserGridProps): UserGridBinding {
   const pendingRevealRef = useRef<string | null>(null)
   const pendingFocusRef = useRef<{ rowId: string; columnId: UserField } | null>(null)
   const spreadsheetControllerRef = useRef<ReturnType<typeof useSpreadsheet<UserRecord>>['controller'] | null>(null)
+  const ownedEditorInvalidRef = useRef(new WeakSet<HTMLElement>())
   const [acknowledgment, setAcknowledgment] = useState<DataAcknowledgment>()
 
   useEffect(() => {
@@ -68,22 +82,23 @@ export function useUserSpreadsheet(options: UserGridProps): UserGridBinding {
         const errorId = userErrorId(rowId, field)
         const cellInvalid = error === undefined ? 'false' : 'true'
         if (cell.getAttribute('aria-invalid') !== cellInvalid) cell.setAttribute('aria-invalid', cellInvalid)
-        if (error === undefined) {
-          if (cell.getAttribute('aria-describedby') === errorId) cell.removeAttribute('aria-describedby')
-        } else {
-          if (cell.getAttribute('aria-describedby') !== errorId) cell.setAttribute('aria-describedby', errorId)
-        }
+        updateOwnedDescription(cell, errorId, error !== undefined)
 
         const editor = cell.querySelector<HTMLElement>('input, textarea, [contenteditable="true"], [role="combobox"]')
         if (editor === null) continue
-        if (error === undefined) {
-          if (editor.getAttribute('aria-describedby') === errorId) {
-            editor.removeAttribute('aria-describedby')
-            if (editor.getAttribute('aria-invalid') !== 'false') editor.setAttribute('aria-invalid', 'false')
-          }
-        } else {
+        updateOwnedDescription(editor, errorId, error !== undefined)
+        const editorHasLocalError = editor.parentElement?.querySelector('#user-date-editor-error') !== null
+          || (editor.getAttribute('aria-invalid') === 'true' && !ownedEditorInvalidRef.current.has(editor))
+        if (error !== undefined) {
           if (editor.getAttribute('aria-invalid') !== 'true') editor.setAttribute('aria-invalid', 'true')
-          if (editor.getAttribute('aria-describedby') !== errorId) editor.setAttribute('aria-describedby', errorId)
+          ownedEditorInvalidRef.current.add(editor)
+        } else {
+          ownedEditorInvalidRef.current.delete(editor)
+          if (editorHasLocalError) {
+            if (editor.getAttribute('aria-invalid') !== 'true') editor.setAttribute('aria-invalid', 'true')
+          } else if (editor.hasAttribute('aria-invalid') && editor.getAttribute('aria-invalid') !== 'false') {
+            editor.setAttribute('aria-invalid', 'false')
+          }
         }
       }
     }

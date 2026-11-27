@@ -13,8 +13,7 @@ import type {
   DatePickerInputGroupProps,
   DatePickerInputProps,
 } from '@sbwb-design-system/ui-core'
-import { forwardRef, useCallback, useLayoutEffect, useMemo, useRef } from 'react'
-import { useEffect, useState } from 'react'
+import { forwardRef, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FocusEvent, KeyboardEvent, ReactElement, RefObject } from 'react'
 import {
   formatDateBR,
@@ -101,13 +100,13 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
   const inputKey = value === '' ? 'empty' : 'filled'
   const inputNodeRef = useRef<HTMLInputElement | null>(null)
   const inputGroupRef = useRef<HTMLDivElement | null>(null)
+  const calendarTriggerRef = useRef<HTMLButtonElement | null>(null)
   const restoreInputFocusRef = useRef(false)
   const reconciliationPendingRef = useRef(false)
-  const reconciliationTimerRef = useRef<number | null>(null)
-  const calendarSelectionPendingRef = useRef(false)
-  const [pickerValue, setPickerValue] = useState(value)
+  const acceptedValueRef = useRef(value)
+  acceptedValueRef.current = value
   const [reconciliationVersion, setReconciliationVersion] = useState(0)
-  const pickerDate = useMemo(() => dateFromIso(pickerValue), [pickerValue])
+  const pickerDate = useMemo(() => dateFromIso(value), [value])
   const pickerKey = `${inputKey}-${reconciliationVersion}`
   const effectiveCalendarProps = {
     ...calendarProps,
@@ -125,58 +124,40 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
     else if (ref) ref.current = node
   }, [ref])
 
-  useLayoutEffect(() => {
-    if (!restoreInputFocusRef.current) return
-    restoreInputFocusRef.current = false
-    inputNodeRef.current?.focus({ preventScroll: true })
-  }, [inputKey])
+  const reconcileInput = useCallback((): void => {
+    const input = inputNodeRef.current
+    if (input === null) return
 
-  useEffect(() => {
-    if (reconciliationTimerRef.current !== null) window.clearTimeout(reconciliationTimerRef.current)
-    reconciliationTimerRef.current = window.setTimeout(() => {
-      reconciliationTimerRef.current = null
-      const input = inputNodeRef.current
-      if (input === null) return
-
-      const activeElement = document.activeElement
-      const focusInsideControl = activeElement === input
-        || inputGroupRef.current?.contains(activeElement) === true
-        || contentRef?.current?.contains(activeElement) === true
-      const acceptedDisplay = formatDateBR(value)
-      if (calendarSelectionPendingRef.current) {
-        if (input.value === acceptedDisplay) {
-          calendarSelectionPendingRef.current = false
-        } else if (focusInsideControl || activeElement === document.body) {
-          return
-        } else {
-          calendarSelectionPendingRef.current = false
-        }
-      }
-      if (focusInsideControl || input.value === acceptedDisplay) {
-        reconciliationPendingRef.current = false
-        return
-      }
-
-      if (reconciliationPendingRef.current) return
-      reconciliationPendingRef.current = true
-      setPickerValue(value)
-      setReconciliationVersion((version) => version + 1)
-    }, 0)
-    return () => {
-      if (reconciliationTimerRef.current !== null) {
-        window.clearTimeout(reconciliationTimerRef.current)
-        reconciliationTimerRef.current = null
-      }
+    const acceptedDisplay = formatDateBR(acceptedValueRef.current)
+    if (input.value === acceptedDisplay) {
+      reconciliationPendingRef.current = false
+      return
     }
-  })
 
-  useEffect(() => {
-    setPickerValue(value)
-  }, [value])
+    const activeElement = document.activeElement
+    const focusInsideControl = activeElement === input
+      || inputGroupRef.current?.contains(activeElement) === true
+      || contentRef?.current?.contains(activeElement) === true
+    if (focusInsideControl || reconciliationPendingRef.current) return
+
+    reconciliationPendingRef.current = true
+    setReconciliationVersion((version) => version + 1)
+  }, [contentRef])
+
+  const scheduleReconciliation = useCallback((): void => {
+    queueMicrotask(reconcileInput)
+  }, [reconcileInput])
+
+  useLayoutEffect(() => {
+    if (restoreInputFocusRef.current) {
+      restoreInputFocusRef.current = false
+      inputNodeRef.current?.focus({ preventScroll: true })
+    }
+    reconcileInput()
+  })
 
   const handlePickerChange = (date: Date | undefined): void => {
     const nextValue = localDateToIso(date)
-    setPickerValue(nextValue)
     onValueChange(nextValue)
   }
 
@@ -193,7 +174,6 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
       : syntax
     onDraftChange?.(raw, parsed)
     if (parsed.ok) {
-      setPickerValue(parsed.value)
       onValueChange(parsed.value)
     }
     inputProps?.onChange?.(event)
@@ -201,17 +181,31 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
 
   const handleInputBlur = (event: FocusEvent<HTMLInputElement>): void => {
     inputProps?.onBlur?.(event)
+    const relatedTarget = event.relatedTarget
+    if (relatedTarget instanceof HTMLElement && inputGroupRef.current?.contains(relatedTarget) === true) {
+      relatedTarget.focus({ preventScroll: true })
+    }
+    scheduleReconciliation()
   }
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     inputProps?.onKeyDown?.(event)
+    if (event.key === 'Enter' || event.key === 'Tab' || event.key === 'Escape') scheduleReconciliation()
+  }
+
+  const handleOpenChange = (nextOpen: boolean): void => {
+    onOpenChange?.(nextOpen)
+    if (!nextOpen) scheduleReconciliation()
   }
 
   const handleCalendarSelect = (date: Date | undefined): void => {
-    if (date !== undefined) {
-      calendarSelectionPendingRef.current = true
-      setReconciliationVersion((version) => version + 1)
-    }
+    scheduleReconciliation()
+    queueMicrotask(() => {
+      const activeElement = document.activeElement
+      if (activeElement === document.body || contentRef?.current?.contains(activeElement) === true) {
+        calendarTriggerRef.current?.focus({ preventScroll: true })
+      }
+    })
     onCalendarSelect?.(localDateToIso(date))
   }
 
@@ -222,7 +216,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
       minDate={minimumDate}
       maxDate={maximumDate}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       onChange={handlePickerChange}
       size="md"
     >
@@ -248,6 +242,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
         />
         <DatePickerIconTrigger
           {...iconTriggerProps}
+          ref={calendarTriggerRef}
           disabled={disabled}
           aria-label="Abrir calendário"
         />

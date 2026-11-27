@@ -54,6 +54,16 @@ function AppControlsHarness() {
         </output>
       </section>
 
+      <section aria-label="Fixture do seletor de data com pai fixo" className="sw:flex sw:flex-col sw:gap-3">
+        <AppDatePicker
+          value="1988-03-14"
+          onValueChange={() => {}}
+          ariaLabel="Data com pai fixo"
+          calendarProps={{ defaultMonth: isoToLocalDate('1988-03-14') }}
+        />
+        <button type="button">Foco externo fixo</button>
+      </section>
+
       <section aria-label="Fixture do seletor de data com atualização adiada" className="sw:flex sw:flex-col sw:gap-3">
         <AppDatePicker
           value={deferredDate}

@@ -2,7 +2,7 @@ import type { UseFormReturn } from 'react-hook-form'
 import type { UsersFormValues } from '../types.ts'
 
 export type UserGridControls = {
-  /** Returns false when the active editor rejected its value on stop. */
+  /** Returns false when the active editor was unchanged or rejected, and true when no editor was active. */
   finishEditing(): Promise<boolean>
   cancelEditing(): void
   synchronizeExternalData(): void

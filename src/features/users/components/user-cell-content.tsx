@@ -11,8 +11,6 @@ export function UserCellContent({
   params,
 }: {
   params: UserCellRendererParams
-  error: string | undefined
-  errorId: string
 }): ReactElement {
   const value = params.valueFormatted ?? params.value ?? ''
   return <span>{String(value)}</span>

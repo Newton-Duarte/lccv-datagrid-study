@@ -10,7 +10,6 @@ import { RoleEditor } from '../components/editors/role-editor.tsx'
 import { UserCellContent } from '../components/user-cell-content.tsx'
 import { FirstKeyTextEditor } from '../components/editors/first-key-text-editor.tsx'
 import type { UserField, UserRecord } from '../types.ts'
-import { userErrorId } from '../utils/validation.ts'
 
 type UserCellRendererParams = Pick<
   SpreadsheetCellRendererParams<UserRecord, unknown>,
@@ -20,11 +19,9 @@ type UserCellRendererParams = Pick<
 export function createUserColumns(
   getFieldError: (rowId: string | undefined, field: UserField) => string | undefined,
 ): ColDef<UserRecord>[] {
-  const renderCell = (field: UserField) => (params: SpreadsheetCellRendererParams<UserRecord, unknown>) => (
+  const renderCell = () => (params: SpreadsheetCellRendererParams<UserRecord, unknown>) => (
     <UserCellContent
       params={params as UserCellRendererParams}
-      error={getFieldError(params.data?.id, field)}
-      errorId={userErrorId(params.data?.id, field)}
     />
   )
 
@@ -43,7 +40,7 @@ export function createUserColumns(
       minWidth: 260,
       cellEditor: FirstKeyTextEditor<UserRecord>,
       cellEditorParams: { inputAriaLabel: 'Nome do usuário' },
-      cellRendererParams: { renderContent: renderCell('name') },
+      cellRendererParams: { renderContent: renderCell() },
       cellClassRules: invalidRules('name'),
       tooltipValueGetter: ({ data }) => getFieldError(data?.id, 'name'),
     },
@@ -57,7 +54,7 @@ export function createUserColumns(
       maxWidth: 220,
       cellEditor: RoleEditor,
       cellEditorParams: { inputAriaLabel: 'Perfil' },
-      cellRendererParams: { renderContent: renderCell('role') },
+      cellRendererParams: { renderContent: renderCell() },
       cellClassRules: invalidRules('role'),
       tooltipValueGetter: ({ data }) => getFieldError(data?.id, 'role'),
     },
@@ -77,7 +74,7 @@ export function createUserColumns(
         && !event.metaKey
         && !event.altKey
         && !event.shiftKey,
-      cellRendererParams: { renderContent: renderCell('birthDate') },
+      cellRendererParams: { renderContent: renderCell() },
       valueFormatter: ({ value }) => formatDateBR(typeof value === 'string' ? value : ''),
       cellClassRules: invalidRules('birthDate'),
       tooltipValueGetter: ({ data }) => getFieldError(data?.id, 'birthDate'),
@@ -94,7 +91,7 @@ export function createUserColumns(
       cellDataType: 'number',
       cellEditor: SpreadsheetNumberEditor<UserRecord>,
       cellEditorParams: { inputAriaLabel: 'Salário mensal em reais' },
-      cellRendererParams: { renderContent: renderCell('salary') },
+      cellRendererParams: { renderContent: renderCell() },
       valueFormatter: ({ value }) => typeof value === 'number' && Number.isFinite(value) ? BRL_FORMAT.format(value) : '',
       cellClass: 'ag-right-aligned-cell',
       cellClassRules: invalidRules('salary'),

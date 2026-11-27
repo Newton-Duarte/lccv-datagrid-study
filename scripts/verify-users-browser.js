@@ -66,6 +66,21 @@ async (page) => {
     const initialSelectedDateButton = page.getByRole('button', { name: /^segunda-feira, 14 de março de 1988/ })
     assert((await initialSelectedDateButton.getAttribute('aria-label'))?.includes('selecionado') === true, 'O dia selecionado não expôs o modificador acessível em português')
     await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    await waitFor(async () => (await page.locator('[role="dialog"]').count()) === 0, 'O popup inicial não terminou de fechar')
+
+    const fixedFixture = page.getByRole('region', { name: 'Fixture do seletor de data com pai fixo', exact: true })
+    const fixedInput = fixedFixture.getByRole('textbox', { name: 'Data com pai fixo' })
+    await fixedFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    await page.getByRole('button', { name: /^terça-feira, 15 de março de 1988/ }).click()
+    await waitFor(async () => (await page.locator('[role="dialog"]').count()) === 0, 'O popup do pai fixo não fechou após a seleção')
+    await fixedFixture.getByRole('button', { name: 'Foco externo fixo', exact: true }).click()
+    assert(await fixedInput.inputValue() === '14/03/1988', 'O pai fixo não restaurou o texto aceito após uma proposta recusada')
+    await fixedFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    const fixedSelectedDay = page.locator('[role="dialog"] [role="gridcell"][aria-selected="true"] button')
+    assert(await fixedSelectedDay.count() === 1, 'O pai fixo deveria manter exatamente um dia selecionado')
+    assert((await fixedSelectedDay.getAttribute('aria-label'))?.startsWith('segunda-feira, 14 de março de 1988') === true, 'O pai fixo manteve o dia recusado selecionado')
+    await fixedFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    await waitFor(async () => (await page.locator('[role="dialog"]').count()) === 0, 'O popup do pai fixo não terminou de fechar')
 
     const deferredFixture = page.getByRole('region', { name: 'Fixture do seletor de data com atualização adiada', exact: true })
     const deferredInput = deferredFixture.getByRole('textbox', { name: 'Data controlada adiada' })
@@ -117,9 +132,10 @@ async (page) => {
     const deferredCalendarDay = page.locator('[role=dialog] [role=gridcell] button').first()
     const deferredCalendarLabel = await deferredCalendarDay.getAttribute('aria-label')
     await deferredCalendarDay.click()
+    await waitFor(async () => (await page.locator('[role="dialog"]').count()) === 0, 'O popup adiado não fechou após a seleção')
     await waitFor(async () => (await deferredPending.textContent()) !== '', 'Seleção adiada do calendário não criou um valor pendente')
     assert(await deferredOutput.textContent() === '', 'Seleção adiada do calendário alterou o valor aceito antes da confirmação')
-    assert((await deferredInput.inputValue()) !== '', 'Seleção adiada do calendário não atualizou o texto visível')
+    assert(await deferredInput.inputValue() === '', 'Seleção adiada do calendário exibiu uma proposta não aceita')
     await deferredReject.click()
     await waitFor(async () => (await deferredPending.textContent()) === '', 'Rejeição da seleção de calendário não restaurou o pendente')
     assert(await deferredOutput.textContent() === '', 'Rejeição do calendário alterou o valor aceito')
@@ -127,6 +143,7 @@ async (page) => {
     await deferredFixture.getByRole('button', { name: 'Abrir calendário' }).click()
     assert(await page.locator('[role=dialog] [aria-selected="true"]').count() === 0, `Rejeição do calendário deixou ${deferredCalendarLabel ?? 'um dia'} selecionado`)
     await deferredFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    await waitFor(async () => (await page.locator('[role="dialog"]').count()) === 0, 'O popup adiado não terminou de fechar')
 
     await dateInput.click()
     await button('Forçar rerender independente').click()
@@ -211,6 +228,28 @@ async (page) => {
     await boundedInput.press('Enter')
     await waitFor(async () => (await boundedInput.inputValue()) === '15/06/2000', 'Data digitada acima do maxDate não voltou ao valor aceito')
     assert(await boundedOutput.textContent() === '2000-06-15', 'Data digitada acima do maxDate foi publicada')
+
+    const boundedFixture = page.getByRole('region', { name: 'Fixture do seletor de data com limites', exact: true })
+    await boundedInput.click()
+    await boundedInput.press('Tab')
+    const boundedTrigger = boundedFixture.getByRole('button', { name: 'Abrir calendário', exact: true })
+    await boundedTrigger.press('Enter')
+    const boundedKeyboardDay = page.getByRole('button', { name: /^sexta-feira, 16 de junho de 2000/ })
+    await boundedKeyboardDay.focus()
+    await boundedKeyboardDay.press('Enter')
+    await waitFor(async () => (await boundedOutput.textContent()) === '2000-06-16', 'Seleção por teclado não publicou a data limitada')
+    await waitFor(async () => (await boundedInput.inputValue()) === '16/06/2000', 'Seleção por teclado não atualizou o texto limitado')
+    const boundedFocus = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      label: document.activeElement?.getAttribute('aria-label'),
+    }))
+    assert(boundedFocus.tag === 'BUTTON' && boundedFocus.label === 'Abrir calendário', 'Seleção por teclado não devolveu o foco ao próprio gatilho')
+    await page.keyboard.press('Tab')
+    const boundedNextFocus = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      label: document.activeElement?.getAttribute('aria-label'),
+    }))
+    assert(boundedNextFocus.tag !== 'BODY' && boundedNextFocus.label !== 'Data controlada', 'Tab após seleção por teclado perdeu a continuidade do foco')
 
     const select = page.getByRole('combobox', { name: 'Seleção genérica' })
     const selectOutput = page.getByTestId('controlled-select-output')
@@ -322,6 +361,7 @@ async (page) => {
     assert(await button('Salvar alterações').isDisabled(), 'Salvar deveria começar desabilitado')
     assert(await page.getByRole('button', { name: 'Salvar alterações', exact: true }).count() === 1, 'O comando limpo deveria se chamar exatamente Salvar alterações')
     assert(await button('Salvar alterações').getAttribute('aria-describedby') === null, 'O comando limpo não deveria ter descrição de pendência')
+    assert(await page.locator('#users-save-description').count() === 0, 'O rodapé limpo não deveria expor a descrição de alterações pendentes')
     assert(await discard().isDisabled(), 'Descartar deveria começar desabilitado')
     assert(await page.getByText('18 registros', { exact: true }).isVisible(), 'O contador inicial deveria ser 18 registros')
     for (const heading of ['Nome', 'Perfil', 'Data de nascimento', 'Salário mensal (R$)']) {
@@ -405,6 +445,15 @@ async (page) => {
     await waitFor(async () => !(await save().isDisabled()), 'A primeira tecla imprimível do Nome deveria habilitar Salvar')
     await firstNameEditor.press('Escape')
     await waitFor(async () => !(await firstNameEditor.isVisible()), 'Escape não cancelou a edição iniciada pela primeira tecla do Nome')
+
+    await fresh()
+    await cell('user-001', 'name').click()
+    await page.keyboard.type('E')
+    const firstKeyEnterEditor = page.getByRole('textbox', { name: 'Nome do usuário', exact: true })
+    await waitFor(async () => (await firstKeyEnterEditor.inputValue()) === 'E', 'A primeira tecla do Nome não ficou disponível para Enter')
+    await firstKeyEnterEditor.press('Enter')
+    await waitFor(async () => !(await firstKeyEnterEditor.isVisible()), 'Enter não finalizou o editor iniciado pela primeira tecla do Nome')
+    await waitFor(async () => (await cellText('user-001', 'name')).startsWith('E'), 'Enter não armazenou o valor iniciado pela primeira tecla do Nome')
 
     await fresh()
     await cell('user-001', 'name').click()
@@ -568,11 +617,19 @@ async (page) => {
     await fresh()
     const rejectedDraftId = await addDraft()
     await page.locator('input[aria-label="Nome do usuário"]').press('Escape')
+    const combinedSummary = page.locator('[aria-label="Resumo dos erros"]')
+    await clickSave('linha vazia antes da edição de data')
+    await waitFor(() => combinedSummary.isVisible(), 'Save inicial não revelou os erros da linha vazia')
     await cell(rejectedDraftId, 'birthDate').dblclick()
     const rejectedDraftDate = page.locator('input[aria-label="Data de nascimento"]')
     await rejectedDraftDate.fill('31/02/1990')
+    const rejectedDateDescriptions = await rejectedDraftDate.evaluate((input) => {
+      const ids = (input.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+      return ids.map((id) => ({ id, text: document.getElementById(id)?.textContent ?? '' }))
+    })
+    assert(rejectedDateDescriptions.some(({ id, text }) => id === 'user-date-editor-error' && text.includes('não existe')), 'A data inválida não expôs a descrição específica do editor')
+    assert(rejectedDateDescriptions.some(({ id, text }) => id !== 'user-date-editor-error' && text.includes('Informe uma data de nascimento válida.')), 'A data inválida perdeu o Alert do campo armazenado')
     await clickSave('rascunho de data inválida com linha vazia')
-    const combinedSummary = page.locator('[aria-label="Resumo dos erros"]')
     await waitFor(() => combinedSummary.isVisible(), 'Save rejeitado não revelou os erros da linha vazia')
     const combinedText = (await combinedSummary.textContent()) ?? ''
     assert(combinedText.includes('Nome') && combinedText.includes('Salário mensal'), 'Save rejeitado não validou o restante da planilha')

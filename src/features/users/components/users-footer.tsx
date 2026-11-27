@@ -48,7 +48,7 @@ export function UsersFooter({
           <Undo size={17} aria-hidden="true" />
           Descartar
         </Button>
-        <span id={saveDescriptionId} className="sw:sr-only">Há alterações não salvas.</span>
+        {isDirty ? <span id={saveDescriptionId} className="sw:sr-only">Há alterações não salvas.</span> : null}
         <Button
           type="button"
           disabled={disabled}
