@@ -84,6 +84,8 @@ export function isoToLocalDate(iso: string): Date | undefined {
 }
 
 export function localDateToIso(date: Date | undefined): string {
+  // A local Date cannot represent a skipped civil day such as Pacific/Apia
+  // 2011-12-30; the screen documents this rare round-trip limitation.
   if (date === undefined) return ''
   if (Number.isNaN(date.getTime())) throw invalidDateError(date)
 

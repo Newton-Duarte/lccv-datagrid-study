@@ -71,6 +71,12 @@ export function createUserColumns(
       maxWidth: 190,
       cellEditor: DateEditor,
       cellEditorParams: { inputAriaLabel: 'Data de nascimento' },
+      suppressKeyboardEvent: ({ event, editing }) => editing
+        && event.key === 'Enter'
+        && !event.ctrlKey
+        && !event.metaKey
+        && !event.altKey
+        && !event.shiftKey,
       cellRendererParams: { renderContent: renderCell('birthDate') },
       valueFormatter: ({ value }) => formatDateBR(typeof value === 'string' ? value : ''),
       cellClassRules: invalidRules('birthDate'),

@@ -81,6 +81,8 @@ function AppControlsHarness() {
           value={boundedDate}
           onValueChange={setBoundedDate}
           ariaLabel="Data com limites"
+          placeholder="Data limitada"
+          density="cell"
           minDate="2000-01-01"
           maxDate="2000-12-31"
           calendarProps={{ defaultMonth: isoToLocalDate('2000-06-15') }}
@@ -97,6 +99,7 @@ function AppControlsHarness() {
           onValueChange={setSelection}
           ariaLabel="Seleção genérica"
           placeholder="Escolha uma opção"
+          density="cell"
         />
         <Button type="button" onClick={() => setSelection('')}>Limpar seleção externa</Button>
         <output aria-label="Valor da seleção controlada" data-testid="controlled-select-output">

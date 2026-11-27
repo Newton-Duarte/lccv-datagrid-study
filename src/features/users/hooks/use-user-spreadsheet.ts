@@ -1,5 +1,5 @@
 import { AG_GRID_LOCALE_BR } from '@ag-grid-community/locale'
-import type { CellEditingStoppedEvent, ColDef, GridApi, GridReadyEvent } from 'ag-grid-community'
+import type { CellEditingStartedEvent, CellEditingStoppedEvent, ColDef, GridApi, GridReadyEvent } from 'ag-grid-community'
 import {
   createImmutableDataAdapter,
   useSpreadsheet,
@@ -13,7 +13,7 @@ import type { UserGridControls, UserGridProps } from '../grid/types.ts'
 import { USER_BINDINGS } from '../grid/user-bindings.ts'
 import type { UserField, UserRecord } from '../types.ts'
 import { cloneUserRows } from '../utils/user-record.ts'
-import { isVisibleUserError } from '../utils/validation.ts'
+import { isVisibleUserError, userErrorId } from '../utils/validation.ts'
 import { usePendingGridDraft } from './use-pending-grid-draft.ts'
 
 export type UserGridBinding = {
@@ -54,6 +54,40 @@ export function useUserSpreadsheet(options: UserGridProps): UserGridBinding {
     if (!isVisibleUserError(fieldState, showAllErrorsRef.current)) return undefined
     return typeof fieldState.error?.message === 'string' ? fieldState.error.message : 'Valor inválido.'
   }, [form])
+
+  const syncCellAccessibility = useCallback(() => {
+    const host = document.querySelector<HTMLElement>('.user-grid-host')
+    if (host === null || !host.isConnected) return
+
+    for (const row of host.querySelectorAll<HTMLElement>('[role="row"][row-id]')) {
+      const rowId = row.getAttribute('row-id') ?? undefined
+      for (const field of EDITABLE_COLUMNS) {
+        const cell = row.querySelector<HTMLElement>(`[role="gridcell"][col-id="${field}"]`)
+        if (cell === null) continue
+        const error = getFieldError(rowId, field)
+        const errorId = userErrorId(rowId, field)
+        const cellInvalid = error === undefined ? 'false' : 'true'
+        if (cell.getAttribute('aria-invalid') !== cellInvalid) cell.setAttribute('aria-invalid', cellInvalid)
+        if (error === undefined) {
+          if (cell.getAttribute('aria-describedby') === errorId) cell.removeAttribute('aria-describedby')
+        } else {
+          if (cell.getAttribute('aria-describedby') !== errorId) cell.setAttribute('aria-describedby', errorId)
+        }
+
+        const editor = cell.querySelector<HTMLElement>('input, textarea, [contenteditable="true"], [role="combobox"]')
+        if (editor === null) continue
+        if (error === undefined) {
+          if (editor.getAttribute('aria-describedby') === errorId) {
+            editor.removeAttribute('aria-describedby')
+            if (editor.getAttribute('aria-invalid') !== 'false') editor.setAttribute('aria-invalid', 'false')
+          }
+        } else {
+          if (editor.getAttribute('aria-invalid') !== 'true') editor.setAttribute('aria-invalid', 'true')
+          if (editor.getAttribute('aria-describedby') !== errorId) editor.setAttribute('aria-describedby', errorId)
+        }
+      }
+    }
+  }, [getFieldError])
 
   const [dataState] = useState(() => {
     let version = 0
@@ -192,6 +226,20 @@ export function useUserSpreadsheet(options: UserGridProps): UserGridBinding {
     onInputCapture,
   } = usePendingGridDraft(form, onPendingDraftChange)
 
+  const handleCellEditingStarted = useCallback((event: CellEditingStartedEvent<UserRecord>) => {
+    onCellEditingStarted(event)
+    queueMicrotask(syncCellAccessibility)
+    window.setTimeout(syncCellAccessibility, 0)
+    window.setTimeout(syncCellAccessibility, 50)
+  }, [onCellEditingStarted, syncCellAccessibility])
+
+  const handleCellEditingStopped = useCallback(() => {
+    onCellEditingStopped()
+    queueMicrotask(syncCellAccessibility)
+    window.setTimeout(syncCellAccessibility, 0)
+    window.setTimeout(syncCellAccessibility, 50)
+  }, [onCellEditingStopped, syncCellAccessibility])
+
   const gridDefaults = useMemo(() => ({
     getRowId: ({ data }: { data: UserRecord }) => data.id,
     defaultColDef: { minWidth: 140, sortable: true, filter: true, resizable: true },
@@ -201,9 +249,9 @@ export function useUserSpreadsheet(options: UserGridProps): UserGridBinding {
       tryRevealOrFocus()
     },
     onModelUpdated: () => tryRevealOrFocus(),
-    onCellEditingStarted,
-    onCellEditingStopped,
-  }), [onCellEditingStarted, onCellEditingStopped, tryRevealOrFocus])
+    onCellEditingStarted: handleCellEditingStarted,
+    onCellEditingStopped: handleCellEditingStopped,
+  }), [handleCellEditingStarted, handleCellEditingStopped, tryRevealOrFocus])
 
   const gridProps = useMemo(() => ({
     ...gridDefaults,
@@ -260,8 +308,17 @@ export function useUserSpreadsheet(options: UserGridProps): UserGridBinding {
   const validationErrorsKey = JSON.stringify(validationState.errors)
   const validationTouchedKey = JSON.stringify(validationState.touchedFields)
   useEffect(() => {
+    const host = document.querySelector<HTMLElement>('.user-grid-host')
+    if (host === null) return
+    const observer = new MutationObserver(() => syncCellAccessibility())
+    observer.observe(host, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [syncCellAccessibility])
+
+  useEffect(() => {
     apiRef.current?.refreshCells({ force: true })
-  }, [validationErrorsKey, validationTouchedKey, showAllErrors, users])
+    queueMicrotask(syncCellAccessibility)
+  }, [validationErrorsKey, validationTouchedKey, showAllErrors, syncCellAccessibility, users])
 
   return {
     hostRef: spreadsheet.hostRef,

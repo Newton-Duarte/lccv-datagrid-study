@@ -14,8 +14,10 @@ import type {
   DatePickerInputProps,
 } from '@sbwb-design-system/ui-core'
 import { forwardRef, useCallback, useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import type { ChangeEvent, FocusEvent, KeyboardEvent, ReactElement, RefObject } from 'react'
 import {
+  formatDateBR,
   isValidIsoDate,
   isoToLocalDate,
   localDateToIso,
@@ -27,6 +29,7 @@ export type AppDatePickerProps = {
   value: string
   onValueChange(value: string): void
   ariaLabel: string
+  placeholder?: string
   onDraftChange?(raw: string, parsed: DateInputResult): void
   onCalendarSelect?(value: string): void
   density?: 'default' | 'cell'
@@ -49,6 +52,17 @@ const calendarLabels: NonNullable<DatePickerCalendarProps['labels']> = {
   labelYearDropdown: () => 'Selecionar ano',
   labelNext: () => 'Próximo mês',
   labelPrevious: () => 'Mês anterior',
+  labelDayButton: (date, modifiers) => {
+    let label = new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(date)
+    if (modifiers.today) label = `Hoje, ${label}`
+    if (modifiers.selected) label = `${label}, selecionado`
+    return label
+  },
 }
 
 function dateFromIso(value: string): Date | undefined {
@@ -64,6 +78,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
     value,
     onValueChange,
     ariaLabel,
+    placeholder = 'DD/MM/AAAA',
     onDraftChange,
     onCalendarSelect,
     density = 'default',
@@ -81,12 +96,19 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
   },
   ref,
 ): ReactElement {
-  const selectedDate = useMemo(() => dateFromIso(value), [value])
   const minimumDate = useMemo(() => dateFromIso(minDate), [minDate])
   const maximumDate = useMemo(() => dateFromIso(maxDate), [maxDate])
   const inputKey = value === '' ? 'empty' : 'filled'
   const inputNodeRef = useRef<HTMLInputElement | null>(null)
+  const inputGroupRef = useRef<HTMLDivElement | null>(null)
   const restoreInputFocusRef = useRef(false)
+  const reconciliationPendingRef = useRef(false)
+  const reconciliationTimerRef = useRef<number | null>(null)
+  const calendarSelectionPendingRef = useRef(false)
+  const [pickerValue, setPickerValue] = useState(value)
+  const [reconciliationVersion, setReconciliationVersion] = useState(0)
+  const pickerDate = useMemo(() => dateFromIso(pickerValue), [pickerValue])
+  const pickerKey = `${inputKey}-${reconciliationVersion}`
   const effectiveCalendarProps = {
     ...calendarProps,
     captionLayout: calendarProps?.captionLayout ?? 'dropdown',
@@ -109,8 +131,53 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
     inputNodeRef.current?.focus({ preventScroll: true })
   }, [inputKey])
 
+  useEffect(() => {
+    if (reconciliationTimerRef.current !== null) window.clearTimeout(reconciliationTimerRef.current)
+    reconciliationTimerRef.current = window.setTimeout(() => {
+      reconciliationTimerRef.current = null
+      const input = inputNodeRef.current
+      if (input === null) return
+
+      const activeElement = document.activeElement
+      const focusInsideControl = activeElement === input
+        || inputGroupRef.current?.contains(activeElement) === true
+        || contentRef?.current?.contains(activeElement) === true
+      const acceptedDisplay = formatDateBR(value)
+      if (calendarSelectionPendingRef.current) {
+        if (input.value === acceptedDisplay) {
+          calendarSelectionPendingRef.current = false
+        } else if (focusInsideControl || activeElement === document.body) {
+          return
+        } else {
+          calendarSelectionPendingRef.current = false
+        }
+      }
+      if (focusInsideControl || input.value === acceptedDisplay) {
+        reconciliationPendingRef.current = false
+        return
+      }
+
+      if (reconciliationPendingRef.current) return
+      reconciliationPendingRef.current = true
+      setPickerValue(value)
+      setReconciliationVersion((version) => version + 1)
+    }, 0)
+    return () => {
+      if (reconciliationTimerRef.current !== null) {
+        window.clearTimeout(reconciliationTimerRef.current)
+        reconciliationTimerRef.current = null
+      }
+    }
+  })
+
+  useEffect(() => {
+    setPickerValue(value)
+  }, [value])
+
   const handlePickerChange = (date: Date | undefined): void => {
-    onValueChange(localDateToIso(date))
+    const nextValue = localDateToIso(date)
+    setPickerValue(nextValue)
+    onValueChange(nextValue)
   }
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -125,7 +192,10 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
       }
       : syntax
     onDraftChange?.(raw, parsed)
-    if (parsed.ok) onValueChange(parsed.value)
+    if (parsed.ok) {
+      setPickerValue(parsed.value)
+      onValueChange(parsed.value)
+    }
     inputProps?.onChange?.(event)
   }
 
@@ -138,13 +208,17 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
   }
 
   const handleCalendarSelect = (date: Date | undefined): void => {
+    if (date !== undefined) {
+      calendarSelectionPendingRef.current = true
+      setReconciliationVersion((version) => version + 1)
+    }
     onCalendarSelect?.(localDateToIso(date))
   }
 
   return (
     <DatePicker
-      key={inputKey}
-      value={selectedDate}
+      key={pickerKey}
+      value={pickerDate}
       minDate={minimumDate}
       maxDate={maximumDate}
       open={open}
@@ -154,6 +228,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
     >
       <DatePickerInputGroup
         {...inputGroupProps}
+        ref={inputGroupRef}
         fullWidth={inputGroupProps?.fullWidth ?? true}
         className={[
           'app-datepicker__group sw:min-w-0',
@@ -165,6 +240,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
           {...inputProps}
           ref={setInputRef}
           aria-label={ariaLabel}
+          placeholder={inputProps?.placeholder ?? placeholder}
           disabled={disabled}
           onChange={handleInputChange}
           onBlur={handleInputBlur}

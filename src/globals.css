@@ -2,6 +2,7 @@
 @import '@sbwb-design-system/ui-core/tailwind.css';
 
 @source '../src/**/*.{ts,tsx}';
+@import './components/controls.css';
 @import './features/users/users.css';
 
 @layer base {

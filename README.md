@@ -39,8 +39,10 @@ O app importa `DataGrid`, `useSpreadsheet`, `createImmutableDataAdapter`, editor
 
 Editar uma célula publica o valor aceito diretamente no formulário e mantém histórico local de seleção, copiar/colar, preenchimento, limpar, desfazer e refazer. Um rascunho alterado ainda em edição habilita as ações, mas abrir uma célula sem alterar não habilita nada. `Novo usuário` cria uma linha com ID novo, `Visualizador` e salário nulo; limpa filtros/ordenação para revelá-la e abre o editor de Nome.
 
-`Salvar alterações` termina o editor ativo, captura e valida um clone completo da planilha e, se válido, avança o baseline em memória com `resetDefaultValues`. `Descartar` cancela o editor, restaura todas as linhas do último baseline salvo e sincroniza o histórico externo. Ambos ficam desabilitados quando não há alteração nem edição ativa. Salvar confirma somente nesta sessão: recarregar a página restaura os dados de exemplo e não há chamadas de API ou escrita em `localStorage`.
+`Salvar alterações` termina o editor ativo, captura e valida um clone completo da planilha e, se válido, avança o baseline em memória com `resetDefaultValues`. `Descartar` cancela o editor, restaura todas as linhas do último baseline salvo e sincroniza o histórico externo. Ambos ficam desabilitados quando não há alteração nem rascunho alterado; abrir um editor sem modificar seu valor não habilita as ações. Salvar confirma somente nesta sessão: recarregar a página restaura os dados de exemplo e não há chamadas de API ou escrita em `localStorage`.
 
 Todos os textos, mensagens de validação, datas (`DD/MM/AAAA`), filtros e valores monetários usam português brasileiro. No celular, o shell se reorganiza e a grade mantém rolagem horizontal própria.
 
 A especificação ativa é [`2026-11-26-users-refinements-design.md`](docs/superpowers/specs/2026-11-26-users-refinements-design.md). Os documentos de 2026-11-25 permanecem como histórico da primeira implementação e apontam para essa revisão.
+
+Limitação conhecida: `Date` local não consegue representar o dia civil que foi pulado em fusos com mudanças históricas de calendário, como `Pacific/Apia` em `30/12/2011`. A conversão de datas da tela permanece baseada no calendário local e não lança durante a renderização do seletor.

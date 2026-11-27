@@ -1,5 +1,5 @@
 import { useGridCellEditor } from 'ag-grid-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactElement } from 'react'
 import { AppDatePicker } from '../../../../components/app-datepicker.tsx'
 import { formatDateBR, getTodayIsoDate, parseDateInput } from '../../../../utils/date.ts'
@@ -34,7 +34,7 @@ export function DateEditor(props: UserCellEditorProps): ReactElement {
     queueMicrotask(() => props.eGridCell.focus({ preventScroll: true }))
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     inputRef.current?.focus({ preventScroll: true })
     if (seedScheduledRef.current || initialDraft === '' || initialDraft === formatDateBR(committedValue)) return
 
@@ -114,6 +114,14 @@ export function DateEditor(props: UserCellEditorProps): ReactElement {
         contentRef={contentRef}
         onDraftChange={handleDraftChange}
         onCalendarSelect={handleCalendarSelect}
+        iconTriggerProps={{
+          onPointerDown: (event) => {
+            // Keep AG Grid from ending this cell editor before the trigger's
+            // click handler can open the portaled calendar.
+            event.preventDefault()
+            event.stopPropagation()
+          },
+        }}
         inputProps={{
           className: 'user-date-editor',
           'aria-invalid': error !== null,

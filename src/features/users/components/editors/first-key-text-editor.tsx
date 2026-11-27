@@ -4,6 +4,7 @@ import {
 import type {
   SpreadsheetTextEditorProps,
 } from 'sbwb-ds-v2-aggrid'
+import { useLayoutEffect, useRef } from 'react'
 import type { ReactElement } from 'react'
 
 /**
@@ -12,9 +13,22 @@ import type { ReactElement } from 'react'
  * is not lost before a native input event can be emitted.
  */
 export function FirstKeyTextEditor<TData>(props: SpreadsheetTextEditorProps<TData>): ReactElement {
-  const initialValue = props.cellStartedEdit && props.eventKey?.length === 1
-    ? props.eventKey
-    : props.value
+  const { cellStartedEdit, eventKey, onValueChange } = props
+  const eventKeySeed = cellStartedEdit && eventKey?.length === 1
+    ? eventKey
+    : null
+  const initialValue = eventKeySeed ?? props.value
+  const publishedSeedRef = useRef<string | null>(null)
+
+  useLayoutEffect(() => {
+    if (
+      !cellStartedEdit
+      || eventKey?.length !== 1
+      || publishedSeedRef.current === initialValue
+    ) return
+    publishedSeedRef.current = eventKeySeed
+    onValueChange(eventKeySeed)
+  }, [initialValue, cellStartedEdit, eventKey, eventKeySeed, onValueChange])
 
   return <SpreadsheetTextEditor {...props} value={initialValue} />
 }

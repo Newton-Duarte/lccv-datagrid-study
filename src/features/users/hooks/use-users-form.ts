@@ -111,18 +111,24 @@ export function useUsersForm(): UsersFormController {
     try {
       const hadPendingDraft = pendingDraftRef.current
       const accepted = await controlsRef.current?.finishEditing() ?? true
-      if (hadPendingDraft && !accepted) {
+      const rejectedDraft = hadPendingDraft && !accepted
+      if (rejectedDraft) {
         setPendingDraft(false)
         pendingDraftRef.current = false
-        onFeedback({ kind: 'error', message: rejectedEditMessage })
-        return
       }
       const snapshot = cloneUsers(form.getValues())
       const valid = (await form.trigger()) && usersFormSchema.safeParse(snapshot).success
       if (!valid) {
         setShowAllErrors(true)
-        onFeedback({ kind: 'error', message: 'Corrija os campos destacados antes de salvar.' })
+        onFeedback({
+          kind: 'error',
+          message: rejectedDraft ? rejectedEditMessage : 'Corrija os campos destacados antes de salvar.',
+        })
         controlsRef.current?.focusFirstError()
+        return
+      }
+      if (rejectedDraft) {
+        onFeedback({ kind: 'error', message: rejectedEditMessage })
         return
       }
       savedBaselineRef.current = cloneUsers(snapshot)

@@ -14,6 +14,7 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const cancelCloseRef = useRef(false)
+  const navigationCloseRef = useRef(false)
   const cancelEditRef = useRef(false)
   const valueCommitRef = useRef(false)
   const [open, setOpen] = useState(true)
@@ -51,9 +52,11 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
 
     const canceled = cancelCloseRef.current
     cancelCloseRef.current = false
+    const navigated = navigationCloseRef.current
+    navigationCloseRef.current = false
     const committed = valueCommitRef.current
     valueCommitRef.current = false
-    if (canceled || committed) return
+    if (canceled || committed || navigated) return
 
     // Radix does not emit onValueChange when the already-selected item is
     // chosen. Closing the picker is still an explicit profile confirmation.
@@ -78,6 +81,23 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
     }
   }
 
+  const handleContentKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== 'Tab' || event.defaultPrevented) return
+    event.preventDefault()
+    navigationCloseRef.current = true
+    setOpen(false)
+    props.onKeyDown(event.nativeEvent)
+  }
+
+  const handleContentEscape = (event: globalThis.KeyboardEvent): void => {
+    event.preventDefault()
+    cancelCloseRef.current = true
+    cancelEditRef.current = true
+    setOpen(false)
+    props.stopEditing()
+    restoreGridFocus()
+  }
+
   return (
     <div ref={editorRootRef} className="user-role-editor">
       <AppSelect
@@ -88,11 +108,15 @@ export function RoleEditor(props: UserCellEditorProps): ReactElement {
         placeholder="Selecione um perfil"
         density="cell"
         open={open}
-      onOpenChange={handleOpenChange}
+        onOpenChange={handleOpenChange}
         contentRef={contentRef}
         onValueChange={commit}
         triggerProps={{ onKeyDown: handleKeyDown }}
-        contentProps={{ className: 'ag-custom-component-popup user-role-editor__content' }}
+        contentProps={{
+          className: 'ag-custom-component-popup user-role-editor__content',
+          onKeyDown: handleContentKeyDown,
+          onEscapeKeyDown: handleContentEscape,
+        }}
       />
     </div>
   )

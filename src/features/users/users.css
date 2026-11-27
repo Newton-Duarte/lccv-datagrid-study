@@ -129,14 +129,6 @@
   outline-offset: 1px;
 }
 
-.app-select__trigger--cell {
-  @apply sw:h-full sw:min-h-0 sw:rounded-none sw:border-0 sw:px-2 sw:py-0;
-}
-
-.app-datepicker__group--cell {
-  @apply sw:h-full sw:min-h-0 sw:rounded-none sw:border-0;
-}
-
 .user-page :is(button, input, select, [contenteditable='true']):focus-visible {
   @apply sw:outline-none sw:ring-2 sw:ring-brand-500 sw:ring-offset-1;
 }

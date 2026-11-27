@@ -28,6 +28,7 @@ export function UsersFooter({
   onDiscard,
 }: UsersFooterProps): ReactElement {
   const disabled = !hasPendingWork || busy
+  const saveDescriptionId = 'users-save-description'
   return (
     <footer className="users-footer">
       <div className="users-footer-main">
@@ -47,11 +48,16 @@ export function UsersFooter({
           <Undo size={17} aria-hidden="true" />
           Descartar
         </Button>
-        <Button type="button" disabled={disabled} onClick={() => void onSave()}>
+        <span id={saveDescriptionId} className="sw:sr-only">Há alterações não salvas.</span>
+        <Button
+          type="button"
+          disabled={disabled}
+          onClick={() => void onSave()}
+          aria-describedby={isDirty ? saveDescriptionId : undefined}
+        >
           {isDirty ? (
             <span className="users-pending-indicator">
               <BadgeDot colorScheme="warning" size="sm" aria-hidden="true" />
-              <span className="sw:sr-only">Há alterações não salvas.</span>
             </span>
           ) : null}
           <Save size={17} aria-hidden="true" />

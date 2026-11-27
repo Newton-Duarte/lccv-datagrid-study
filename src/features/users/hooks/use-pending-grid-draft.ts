@@ -130,7 +130,6 @@ export function usePendingGridDraft(
     const activeEdit = currentEdit !== null && isSameEdit(currentEdit, targetCell)
       ? currentEdit
       : { rowId: targetCell.rowId, field: targetCell.field, initialValue: undefined }
-    if (activeEdit === null) return
     const generation = generationRef.current
     const raw = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
       ? target.value
@@ -142,6 +141,7 @@ export function usePendingGridDraft(
     publishValue(activeEdit, raw)
 
     queueMicrotask(() => {
+      if (!target.isConnected) return
       const liveTarget = getEditingCellTarget(target)
       if (
         generation !== generationRef.current

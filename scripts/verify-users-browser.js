@@ -40,11 +40,11 @@ async (page) => {
   const save = () => page.locator('.users-footer-actions button').filter({ hasText: 'Salvar alterações' })
   const discard = () => button('Descartar')
   const clickSave = async (label) => {
-    assert(!(await save().isDisabled()), `${label}: Salvar está desabilitado antes do clique`)
+    await waitFor(async () => !(await save().isDisabled()), `${label}: Salvar não foi habilitado após o rascunho`)
     await save().click()
   }
   const clickDiscard = async (label) => {
-    assert(!(await discard().isDisabled()), `${label}: Descartar está desabilitado antes do clique`)
+    await waitFor(async () => !(await discard().isDisabled()), `${label}: Descartar não foi habilitado após o rascunho`)
     await discard().click()
     await waitFor(async () => (await save().isDisabled()) && (await discard().isDisabled()), `${label}: a grade não terminou de restaurar o estado limpo`)
   }
@@ -62,6 +62,10 @@ async (page) => {
     const dateOutput = page.getByTestId('controlled-date-output')
     await waitFor(async () => (await dateOutput.textContent()) === '1988-03-14', 'Fixture não iniciou com a data ISO esperada')
     assert(await dateInput.inputValue() === '14/03/1988', 'Fixture não exibiu a data inicial em pt-BR')
+    await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    const initialSelectedDateButton = page.getByRole('button', { name: /^segunda-feira, 14 de março de 1988/ })
+    assert((await initialSelectedDateButton.getAttribute('aria-label'))?.includes('selecionado') === true, 'O dia selecionado não expôs o modificador acessível em português')
+    await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
 
     const deferredFixture = page.getByRole('region', { name: 'Fixture do seletor de data com atualização adiada', exact: true })
     const deferredInput = deferredFixture.getByRole('textbox', { name: 'Data controlada adiada' })
@@ -85,6 +89,7 @@ async (page) => {
     await deferredReject.click()
     await waitFor(async () => (await deferredPending.textContent()) === '1988-03-14', 'O controle adiado não restaurou o valor rejeitado')
     assert(await deferredOutput.textContent() === '1988-03-14', 'Rejeitar alterou o valor controlado')
+    assert(await deferredInput.inputValue() === '14/03/1988', 'Rejeitar não restaurou o texto visível aceito')
     const deferredRejectFocus = await page.evaluate(() => ({
       tag: document.activeElement?.tagName,
       text: document.activeElement?.textContent?.trim(),
@@ -108,6 +113,21 @@ async (page) => {
     }))
     assert(deferredApplyFocus.tag === 'BUTTON' && deferredApplyFocus.text === 'Aplicar valor adiado', 'Aplicar perdeu o foco para o input remountado')
 
+    await deferredFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    const deferredCalendarDay = page.locator('[role=dialog] [role=gridcell] button').first()
+    const deferredCalendarLabel = await deferredCalendarDay.getAttribute('aria-label')
+    await deferredCalendarDay.click()
+    await waitFor(async () => (await deferredPending.textContent()) !== '', 'Seleção adiada do calendário não criou um valor pendente')
+    assert(await deferredOutput.textContent() === '', 'Seleção adiada do calendário alterou o valor aceito antes da confirmação')
+    assert((await deferredInput.inputValue()) !== '', 'Seleção adiada do calendário não atualizou o texto visível')
+    await deferredReject.click()
+    await waitFor(async () => (await deferredPending.textContent()) === '', 'Rejeição da seleção de calendário não restaurou o pendente')
+    assert(await deferredOutput.textContent() === '', 'Rejeição do calendário alterou o valor aceito')
+    await waitFor(async () => (await deferredInput.inputValue()) === '', 'Rejeição do calendário não restaurou o texto vazio aceito')
+    await deferredFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+    assert(await page.locator('[role=dialog] [aria-selected="true"]').count() === 0, `Rejeição do calendário deixou ${deferredCalendarLabel ?? 'um dia'} selecionado`)
+    await deferredFixture.getByRole('button', { name: 'Abrir calendário' }).click()
+
     await dateInput.click()
     await button('Forçar rerender independente').click()
     await waitFor(async () => (await page.getByTestId('fixture-rerender-version').textContent()) === '1', 'Fixture não realizou o rerender com ref inline')
@@ -126,14 +146,16 @@ async (page) => {
     assert(inlineRefExternalClearFocus.tag === 'BUTTON' && inlineRefExternalClearFocus.text === 'Limpar data externa', 'Limpeza externa após ref inline roubou o foco para o input remountado')
 
     await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
-    await page.getByRole('button', { name: 'segunda-feira, 14 de março de 1988' }).click()
+    const selectedDateButton = page.getByRole('button', { name: /^segunda-feira, 14 de março de 1988/ })
+    await selectedDateButton.click()
     await waitFor(async () => (await dateOutput.textContent()) === '1988-03-14', 'Seleção do calendário não atualizou o valor ISO')
     assert(await dateInput.inputValue() === '14/03/1988', 'Seleção do calendário não atualizou o input visível')
     await waitFor(async () => (await page.locator('[role=dialog]').count()) === 0, 'Seleção do calendário não fechou o popup')
 
     await button('Limpar data externa').click()
     await waitFor(async () => (await dateOutput.textContent()) === '', 'A segunda limpeza externa não atualizou o valor ISO')
-    assert(await dateInput.inputValue() === '', 'A segunda limpeza externa deixou uma data visual antiga')
+    await waitFor(async () => (await dateInput.inputValue()) === '', 'A segunda limpeza externa deixou uma data visual antiga')
+    assert(await dateInput.getAttribute('placeholder') === 'DD/MM/AAAA', 'O placeholder padrão não informou o formato DD/MM/AAAA')
     await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
     assert(await page.locator('[role=dialog] [aria-selected="true"]').count() === 0, 'A segunda limpeza externa deixou um dia selecionado no calendário')
     await dateFixture.getByRole('button', { name: 'Abrir calendário' }).click()
@@ -180,6 +202,7 @@ async (page) => {
 
     const boundedInput = page.getByRole('textbox', { name: 'Data com limites' })
     const boundedOutput = page.getByTestId('bounded-date-output')
+    assert(await boundedInput.getAttribute('placeholder') === 'Data limitada', 'O placeholder customizado não foi respeitado')
     await boundedInput.fill('31/12/1999')
     await boundedInput.press('Enter')
     await waitFor(async () => (await boundedInput.inputValue()) === '15/06/2000', 'Data digitada abaixo do minDate não voltou ao valor aceito')
@@ -297,6 +320,8 @@ async (page) => {
     }))
 
     assert(await button('Salvar alterações').isDisabled(), 'Salvar deveria começar desabilitado')
+    assert(await page.getByRole('button', { name: 'Salvar alterações', exact: true }).count() === 1, 'O comando limpo deveria se chamar exatamente Salvar alterações')
+    assert(await button('Salvar alterações').getAttribute('aria-describedby') === null, 'O comando limpo não deveria ter descrição de pendência')
     assert(await discard().isDisabled(), 'Descartar deveria começar desabilitado')
     assert(await page.getByText('18 registros', { exact: true }).isVisible(), 'O contador inicial deveria ser 18 registros')
     for (const heading of ['Nome', 'Perfil', 'Data de nascimento', 'Salário mensal (R$)']) {
@@ -377,16 +402,30 @@ async (page) => {
     await page.keyboard.type('X')
     const firstNameEditor = page.getByRole('textbox', { name: 'Nome do usuário', exact: true })
     await waitFor(async () => (await firstNameEditor.inputValue()) === 'X', 'A primeira tecla imprimível do Nome não inicializou o editor nativo')
-    assert(!(await save().isDisabled()), 'A primeira tecla imprimível do Nome deveria habilitar Salvar')
+    await waitFor(async () => !(await save().isDisabled()), 'A primeira tecla imprimível do Nome deveria habilitar Salvar')
     await firstNameEditor.press('Escape')
     await waitFor(async () => !(await firstNameEditor.isVisible()), 'Escape não cancelou a edição iniciada pela primeira tecla do Nome')
+
+    await fresh()
+    await cell('user-001', 'name').click()
+    await page.keyboard.type('X')
+    const firstKeySaveEditor = page.getByRole('textbox', { name: 'Nome do usuário', exact: true })
+    await waitFor(async () => (await firstKeySaveEditor.inputValue()) === 'X', 'A primeira tecla não ficou disponível para o Save ativo')
+    await clickSave('primeira tecla com editor ativo')
+    await waitFor(() => page.getByText('Alterações salvas nesta sessão', { exact: true }).isVisible(), 'Save da primeira tecla não confirmou o baseline')
+    assert((await cellText('user-001', 'name')).startsWith('X'), 'Save de primeira tecla não persistiu o Nome armazenado')
+    await editText('user-001', 'name', 'Nome do usuário', 'Nome depois da primeira tecla')
+    assert(await page.getByRole('button', { name: 'Salvar alterações', exact: true }).count() === 1, 'O comando pendente deveria manter o nome exato')
+    assert(await button('Salvar alterações').getAttribute('aria-describedby') === 'users-save-description', 'A pendência deveria ser uma descrição acessível do comando')
+    await clickDiscard('baseline da primeira tecla')
+    assert((await cellText('user-001', 'name')).startsWith('X'), 'Discard não restaurou o novo baseline da primeira tecla')
 
     await fresh()
     await cell('user-001', 'salary').click()
     await page.keyboard.type('7')
     const firstSalaryEditor = page.getByRole('textbox', { name: 'Salário mensal em reais', exact: true })
     await waitFor(async () => (await firstSalaryEditor.inputValue()) === '7', 'A primeira tecla imprimível do Salário não inicializou o editor nativo')
-    assert(!(await save().isDisabled()), 'A primeira tecla imprimível do Salário deveria habilitar Salvar')
+    await waitFor(async () => !(await save().isDisabled()), 'A primeira tecla imprimível do Salário deveria habilitar Salvar')
     await firstSalaryEditor.press('Escape')
     await waitFor(async () => !(await firstSalaryEditor.isVisible()), 'Escape não cancelou a edição iniciada pela primeira tecla do Salário')
 
@@ -431,7 +470,8 @@ async (page) => {
     })
     assert(pendingDotGeometry.parentTag === 'BUTTON', 'O indicador pendente deveria pertencer ao botão Salvar')
     assert(pendingDotGeometry.button !== undefined && pendingDotGeometry.dot.left >= pendingDotGeometry.button.left && pendingDotGeometry.dot.right <= pendingDotGeometry.button.right, 'O indicador pendente deveria ficar dentro do botão Salvar')
-    assert(pendingDotGeometry.text.includes('Há alterações não salvas.') && (await save().textContent())?.includes('Salvar alterações') === true, 'O indicador pendente deveria permanecer acessível junto ao rótulo Salvar')
+    assert((await save().textContent())?.includes('Salvar alterações') === true, 'O indicador pendente deveria permanecer visível junto ao rótulo Salvar')
+    assert(await save().getAttribute('aria-describedby') === 'users-save-description', 'O indicador pendente deveria ser a descrição acessível do comando Salvar')
     await clickDiscard('edição temporária')
     await waitFor(() => page.getByText('Alterações descartadas', { exact: true }).isVisible(), 'Discard não anunciou restauração')
     assert((await cellText('user-001', 'name')).includes('Nome confirmado'), 'Discard não restaurou o último baseline salvo')
@@ -526,6 +566,26 @@ async (page) => {
     await waitFor(() => page.getByText('18 registros', { exact: true }).isVisible(), 'Discard não removeu os rascunhos de validação')
 
     await fresh()
+    const rejectedDraftId = await addDraft()
+    await page.locator('input[aria-label="Nome do usuário"]').press('Escape')
+    await cell(rejectedDraftId, 'birthDate').dblclick()
+    const rejectedDraftDate = page.locator('input[aria-label="Data de nascimento"]')
+    await rejectedDraftDate.fill('31/02/1990')
+    await clickSave('rascunho de data inválida com linha vazia')
+    const combinedSummary = page.locator('[aria-label="Resumo dos erros"]')
+    await waitFor(() => combinedSummary.isVisible(), 'Save rejeitado não revelou os erros da linha vazia')
+    const combinedText = (await combinedSummary.textContent()) ?? ''
+    assert(combinedText.includes('Nome') && combinedText.includes('Salário mensal'), 'Save rejeitado não validou o restante da planilha')
+    assert(await page.getByText('A edição não foi aplicada. Verifique o valor informado.', { exact: true }).isVisible(), 'Save rejeitado não reteve o feedback da edição')
+    const combinedFocus = await page.evaluate(() => ({
+      rowId: document.activeElement?.closest('.ag-row')?.getAttribute('row-id'),
+      columnId: document.activeElement?.closest('.ag-cell')?.getAttribute('col-id'),
+    }))
+    assert(combinedFocus.rowId === rejectedDraftId && combinedFocus.columnId === 'name', 'Save rejeitado não focou o primeiro erro armazenado')
+    await clickDiscard('rascunho de data inválida com linha vazia')
+    await waitFor(() => page.getByText('18 registros', { exact: true }).isVisible(), 'Discard não preservou o baseline após Save rejeitado')
+
+    await fresh()
     const blankDraftA = await addDraft()
     const blankDraftB = await addDraft(20)
     assert(blankDraftA !== blankDraftB, 'Os rascunhos vazios deveriam ter IDs de domínio distintos')
@@ -549,7 +609,18 @@ async (page) => {
     assert(dateDescriptionId !== null && await page.locator(`#${dateDescriptionId}`).isVisible(), 'A célula inválida subsequente não apontou para uma descrição visível')
     const errorCountBeforeCorrection = await duplicateItems.count()
     const consoleErrorsBeforeCorrection = consoleErrors.length
-    await editText(blankDraftA, 'name', 'Nome do usuário', 'Rascunho corrigido')
+    await firstInvalidName.dblclick()
+    const invalidNameEditor = page.locator('input[aria-label="Nome do usuário"]')
+    await waitFor(async () => await invalidNameEditor.isVisible(), 'Editor de Nome inválido não abriu')
+    await waitFor(async () => (await firstInvalidName.getAttribute('aria-invalid')) === 'true', 'A célula inválida perdeu aria-invalid ao abrir o editor')
+    const editingNameDescriptionId = await firstInvalidName.getAttribute('aria-describedby')
+    assert(editingNameDescriptionId !== null && await page.locator(`#${editingNameDescriptionId}`).isVisible(), 'A célula inválida perdeu sua descrição visível em edição')
+    assert(await invalidNameEditor.getAttribute('aria-invalid') === 'true', 'O editor de Nome inválido não expôs aria-invalid=true')
+    assert(await invalidNameEditor.getAttribute('aria-describedby') === editingNameDescriptionId, 'O editor de Nome inválido não apontou para o Alert existente')
+    await invalidNameEditor.fill('Rascunho corrigido')
+    await invalidNameEditor.press('Enter')
+    await waitFor(async () => !(await invalidNameEditor.isVisible()), 'A correção do Nome inválido não finalizou o editor')
+    await waitFor(async () => (await cellText(blankDraftA, 'name')).includes('Rascunho corrigido'), 'A correção do Nome inválido não foi publicada')
     await waitFor(async () => (await firstInvalidName.getAttribute('aria-invalid')) === 'false', 'A correção não limpou aria-invalid da célula')
     assert((await firstInvalidName.getAttribute('aria-describedby')) === null, 'A correção deixou aria-describedby obsoleto')
     assert(await duplicateItems.count() === errorCountBeforeCorrection - 1, 'A correção não removeu apenas o erro resolvido')
@@ -667,6 +738,41 @@ async (page) => {
     }))
     assert(roleFocus.rowId === 'user-003' && roleFocus.columnId === 'role', 'Commit de perfil não devolveu o foco à célula estável')
 
+    await fresh()
+    const tabRoleCell = cell('user-003', 'role')
+    const tabRoleBefore = await cellText('user-003', 'role')
+    await tabRoleCell.dblclick()
+    const tabRoleOption = page.locator('.user-role-editor__content [role="option"]').first()
+    await tabRoleOption.focus()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Tab')
+    await waitFor(async () => (await page.locator('.user-role-editor__content').count()) === 0, 'Tab no popup de Perfil não fechou o editor')
+    const tabRoleFocus = await page.evaluate(() => ({
+      rowId: document.activeElement?.closest('.ag-row')?.getAttribute('row-id'),
+      columnId: document.activeElement?.closest('.ag-cell')?.getAttribute('col-id'),
+    }))
+    assert((await cellText('user-003', 'role')).startsWith(tabRoleBefore), 'Tab no popup de Perfil confirmou uma opção apenas destacada')
+    assert(tabRoleFocus.rowId === 'user-003' && tabRoleFocus.columnId === 'birthDate', 'Tab no popup de Perfil não navegou para a próxima célula')
+
+    await tabRoleCell.dblclick()
+    const reverseRoleOption = page.locator('.user-role-editor__content [role="option"]').first()
+    await reverseRoleOption.focus()
+    await page.keyboard.press('Shift+Tab')
+    await waitFor(async () => (await page.locator('.user-role-editor__content').count()) === 0, 'Shift+Tab no popup de Perfil não fechou o editor')
+    const reverseRoleFocus = await page.evaluate(() => ({
+      rowId: document.activeElement?.closest('.ag-row')?.getAttribute('row-id'),
+      columnId: document.activeElement?.closest('.ag-cell')?.getAttribute('col-id'),
+    }))
+    assert(reverseRoleFocus.rowId === 'user-003' && reverseRoleFocus.columnId === 'name', 'Shift+Tab no popup de Perfil não navegou para a célula anterior')
+
+    await tabRoleCell.dblclick()
+    const escapeRoleOption = page.locator('.user-role-editor__content [role="option"]').first()
+    await escapeRoleOption.focus()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Escape')
+    await waitFor(async () => (await page.locator('.user-role-editor__content').count()) === 0, 'Escape no popup de Perfil não fechou o editor')
+    assert((await cellText('user-003', 'role')).startsWith(tabRoleBefore), 'Escape confirmou uma opção de Perfil apenas destacada')
+
     await cell('user-001', 'birthDate').click()
     await page.waitForTimeout(100)
     await page.keyboard.type('1')
@@ -695,6 +801,7 @@ async (page) => {
     await escapeDateCell.dblclick()
     const popupEscapeInput = page.locator('input[aria-label="Data de nascimento"]')
     await page.getByRole('button', { name: 'Abrir calendário' }).click()
+    await waitFor(() => page.locator('[role=dialog]').isVisible(), 'O popup de data não abriu antes do Escape')
     await page.keyboard.press('Escape')
     await waitFor(async () => !(await popupEscapeInput.isVisible()), 'Escape no popup não cancelou o editor de data')
     assert((await cellText('user-003', 'birthDate')).includes('08/12/1979'), 'Escape no popup publicou uma data não escolhida')
@@ -706,6 +813,8 @@ async (page) => {
 
     await cell('user-003', 'birthDate').dblclick()
     const sequentialDate = page.locator('input[aria-label="Data de nascimento"]')
+    await waitFor(async () => await sequentialDate.isVisible() && await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Data de nascimento'), 'O editor sequencial de data não ficou pronto para receber teclado')
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
     await sequentialDate.press('Control+A')
     await page.keyboard.type('29022000')
     await waitFor(async () => (await sequentialDate.inputValue()) === '29/02/2000', 'A máscara de data não acompanhou a digitação sequencial')
@@ -766,6 +875,9 @@ async (page) => {
     })
     await maxCalendar.getByRole('combobox', { name: 'Selecionar ano' }).selectOption(String(maxNavigation.year))
     await maxCalendar.getByRole('combobox', { name: 'Selecionar mês' }).selectOption(String(maxNavigation.month))
+    const todayButton = maxCalendar.locator('[data-today="true"] button')
+    assert(await todayButton.count() === 1, 'O calendário não expôs o dia atual pela API pública de modificadores')
+    assert((await todayButton.getAttribute('aria-label'))?.startsWith('Hoje, ') === true, 'O nome acessível do dia atual não foi localizado em português')
     const nextMonth = maxCalendar.getByRole('button', { name: 'Próximo mês' })
     const tomorrowButton = maxCalendar.locator(`button[aria-label="${maxNavigation.tomorrowLabel}"]`)
     if (maxNavigation.tomorrowMonth === maxNavigation.month) {
@@ -787,7 +899,7 @@ async (page) => {
     await assertEditorFitsCell('data', cell('user-003', 'birthDate'), page.locator('.app-datepicker__group'))
     await page.getByRole('button', { name: 'Abrir calendário' }).click()
     await assertPopupFitsViewport('popup de data desktop', page.locator('.user-date-editor__content'))
-    await page.getByRole('button', { name: 'segunda-feira, 14 de fevereiro de 2000' }).click()
+    await page.getByRole('button', { name: /^segunda-feira, 14 de fevereiro de 2000/ }).click()
     await waitFor(async () => !(await calendarDate.isVisible()), 'A seleção de calendário não finalizou a data')
     assert((await cellText('user-003', 'birthDate')).includes('14/02/2000'), 'A seleção de calendário não publicou o dia escolhido')
     const calendarFocus = await page.evaluate(() => ({
@@ -809,7 +921,7 @@ async (page) => {
     await rejectedDateCell.dblclick()
     const rejectedDateEditor = page.locator('input[aria-label="Data de nascimento"]')
     await rejectedDateEditor.fill('31/02/1990')
-    assert(!(await save().isDisabled()), 'Uma data inválida em edição deveria habilitar Salvar para permitir feedback')
+    await waitFor(async () => !(await save().isDisabled()), 'Uma data inválida em edição deveria habilitar Salvar para permitir feedback')
     await clickSave('data inválida em edição')
     await waitFor(() => page.getByText('A edição não foi aplicada. Verifique o valor informado.', { exact: true }).isVisible(), 'Save de data inválida deveria anunciar a rejeição da edição')
     assert(!(await page.getByRole('status').allTextContents()).some((text) => text.includes('Alterações salvas nesta sessão')), 'Save de data inválida não poderia anunciar sucesso')
