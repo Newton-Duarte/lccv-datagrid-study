@@ -198,6 +198,15 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
     if (!nextOpen) scheduleReconciliation()
   }
 
+  const handleInputGroupBlur = (event: FocusEvent<HTMLDivElement>): void => {
+    inputGroupProps?.onBlur?.(event)
+    if (event.target === inputNodeRef.current) return
+    const relatedTarget = event.relatedTarget
+    const remainsOwned = relatedTarget instanceof Node
+      && (inputGroupRef.current?.contains(relatedTarget) === true || contentRef?.current?.contains(relatedTarget) === true)
+    if (!remainsOwned) scheduleReconciliation()
+  }
+
   const handleCalendarSelect = (date: Date | undefined): void => {
     scheduleReconciliation()
     queueMicrotask(() => {
@@ -223,6 +232,7 @@ export const AppDatePicker = forwardRef<HTMLInputElement, AppDatePickerProps>(fu
       <DatePickerInputGroup
         {...inputGroupProps}
         ref={inputGroupRef}
+        onBlur={handleInputGroupBlur}
         fullWidth={inputGroupProps?.fullWidth ?? true}
         className={[
           'app-datepicker__group sw:min-w-0',
